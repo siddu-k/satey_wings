@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.util.Log
 import android.view.View
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -46,11 +47,53 @@ class AlertHistoryActivity : AppCompatActivity() {
             com.sriox.vasateysec.utils.BottomNavHelper.NavItem.HISTORY
         )
         
-        findViewById<android.widget.ImageView>(R.id.backButton)?.setOnClickListener {
+        binding.backButton.setOnClickListener {
             finish()
+        }
+
+        binding.btnDeleteAll.setOnClickListener {
+            showDeleteAllConfirmation()
         }
         
         loadHistory(refresh = true)
+    }
+
+    private fun showDeleteAllConfirmation() {
+        AlertDialog.Builder(this)
+            .setTitle("Clear History")
+            .setMessage("Are you sure you want to delete all your sent history? This cannot be undone.")
+            .setPositiveButton("Clear All") { _, _ ->
+                deleteAllHistory()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun deleteAllHistory() {
+        lifecycleScope.launch {
+            try {
+                val currentUser = SupabaseClient.client.auth.currentUserOrNull() ?: return@launch
+                
+                // Delete my sent alerts
+                SupabaseClient.client.from("alert_history").delete {
+                    filter {
+                        eq("user_id", currentUser.id)
+                    }
+                }
+
+                // Delete my sent contact requests
+                SupabaseClient.client.from("contact_requests").delete {
+                    filter {
+                        eq("from_user_id", currentUser.id)
+                    }
+                }
+
+                Toast.makeText(this@AlertHistoryActivity, "History cleared", Toast.LENGTH_SHORT).show()
+                loadHistory(refresh = true)
+            } catch (e: Exception) {
+                Toast.makeText(this@AlertHistoryActivity, "Failed to clear history", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
     
     private fun setupBottomNavigation() {
@@ -273,7 +316,7 @@ class AlertAdapter(
             is HistoryItem.Contact -> {
                 val req = item.request
                 val isSentByMe = req.from_user_id == currentUserId
-                holder.binding.alertUserName.text = if (isSentByMe) "Contact Sent to ${req.to_user_id.take(8)}..." else req.from_user_name
+                holder.binding.alertUserName.text = if (isSentByMe) "Contact Sent to ${req.to_user_name ?: req.to_user_id.take(8)}" else req.from_user_name
                 holder.binding.alertEmail.text = "Contact Request"
                 holder.binding.alertPhone.text = req.from_user_phone
                 holder.binding.alertStatus.text = req.status.uppercase()

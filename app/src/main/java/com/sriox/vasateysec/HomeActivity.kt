@@ -216,6 +216,24 @@ class HomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
             }
         }
         
+        // Network and SMS toggle persistence
+        val alertPrefs = getSharedPreferences("alert_settings", MODE_PRIVATE)
+        binding.switchNetworkAlert.isChecked = alertPrefs.getBoolean("network_alert_enabled", true)
+        binding.switchSmsAlert.isChecked = alertPrefs.getBoolean("sms_alert_enabled", false)
+
+        binding.switchNetworkAlert.setOnCheckedChangeListener { _, isChecked ->
+            alertPrefs.edit().putBoolean("network_alert_enabled", isChecked).apply()
+        }
+
+        binding.switchSmsAlert.setOnCheckedChangeListener { _, isChecked ->
+            alertPrefs.edit().putBoolean("sms_alert_enabled", isChecked).apply()
+            if (isChecked) {
+                if (ContextCompat.checkSelfPermission(this, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
+                    ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.SEND_SMS), 101)
+                }
+            }
+        }
+
         // Link AI assistant button
         binding.cardAISafetyHome.setOnClickListener {
             startActivity(Intent(this, AiChatActivity::class.java))
@@ -348,7 +366,11 @@ class HomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
                     }
 
                     val userName = userProfile.name ?: "User"
-                    val wakeWord = (userProfile as? Map<*, *>)?.get("wake_word") as? String ?: "help me"
+                    val wakeWord = userProfile.wake_word ?: "help me"
+                    
+                    runOnUiThread {
+                        binding.voiceStatusText.text = "Say '$wakeWord' to alert"
+                    }
                     
                     getSharedPreferences("vasatey_prefs", MODE_PRIVATE).edit()
                         .putString("wake_word", wakeWord.lowercase())

@@ -67,8 +67,7 @@ class NearbyPeopleActivity : AppCompatActivity(), OnMapReadyCallback {
     }
 
     private fun setupMap() {
-        val mapFragment = supportFragmentManager
-            .findFragmentById(R.id.mapView) as SupportMapFragment
+        val mapFragment = supportFragmentManager.findFragmentById(R.id.mapView) as SupportMapFragment
         mapFragment.getMapAsync(this)
     }
 
@@ -95,8 +94,10 @@ class NearbyPeopleActivity : AppCompatActivity(), OnMapReadyCallback {
         dialog.setContentView(sheetBinding.root)
 
         sheetBinding.tvSheetUserName.text = user.name
+        
+        // Added coordinates to the popup for easy verification
         val timeString = loc.updated_at?.let { formatTimestamp(it) } ?: "Just now"
-        sheetBinding.tvSheetLastUpdate.text = "Last updated: $timeString"
+        sheetBinding.tvSheetLastUpdate.text = "Last updated: $timeString\nCoords: ${String.format("%.5f, %.5f", loc.latitude, loc.longitude)}"
 
         sheetBinding.btnContactUser.setOnClickListener {
             sendContactRequest(user, loc, dialog)
@@ -109,8 +110,6 @@ class NearbyPeopleActivity : AppCompatActivity(), OnMapReadyCallback {
         lifecycleScope.launch {
             try {
                 val currentUser = SupabaseClient.client.auth.currentUserOrNull() ?: return@launch
-                
-                // Fetch fresh user data
                 val me = SupabaseClient.client.from("users")
                     .select { filter { eq("id", currentUser.id) } }
                     .decodeSingle<User>()
@@ -126,36 +125,17 @@ class NearbyPeopleActivity : AppCompatActivity(), OnMapReadyCallback {
                     status = "pending"
                 )
 
-                // Log exactly what we are sending to debug 400 errors
-                Log.d(TAG, "Inserting contact request: $request")
-
-                val response = try {
-                    SupabaseClient.client.from("contact_requests").insert(request) {
-                        select()
-                    }.decodeSingle<ContactRequest>()
-                } catch (e: Exception) {
-                    Log.e(TAG, "Database Insert Failed: ${e.message}")
-                    throw Exception("Database error: ${e.message}")
-                }
+                val response = SupabaseClient.client.from("contact_requests").insert(request) { select() }.decodeSingle<ContactRequest>()
                 
-                val requestId = response.id ?: ""
-                Log.d(TAG, "Successfully created request with ID: $requestId")
-
-                // Send FCM notification via Vercel
                 val targetTokens = FCMTokenManager.getGuardianTokens(listOf(targetUser.email))
                 if (targetTokens.isNotEmpty()) {
-                    val targetToken = targetTokens.first().second
-                    Log.d(TAG, "Sending FCM to token: ${targetToken.take(10)}...")
-                    sendFCMNotification(targetToken, me.name, me.phone, requestId)
-                } else {
-                    Log.w(TAG, "No FCM token found for recipient")
+                    sendFCMNotification(targetTokens.first().second, me.name, me.phone, response.id ?: "")
                 }
 
                 Toast.makeText(this@NearbyPeopleActivity, "Contact request sent!", Toast.LENGTH_LONG).show()
                 dialog.dismiss()
             } catch (e: Exception) {
-                Log.e(TAG, "Request failed", e)
-                Toast.makeText(this@NearbyPeopleActivity, "Failed: ${e.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(this@NearbyPeopleActivity, "Failed to send request", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -163,32 +143,11 @@ class NearbyPeopleActivity : AppCompatActivity(), OnMapReadyCallback {
     private suspend fun sendFCMNotification(token: String, fromName: String, fromPhone: String, requestId: String) {
         withContext(Dispatchers.IO) {
             try {
-                val client = okhttp3.OkHttpClient()
-                val jsonBody = """
-                    {
-                        "token": "$token",
-                        "type": "contact_request",
-                        "title": "📞 Contact Request",
-                        "body": "$fromName needs to contact you. Tap to view details.",
-                        "requestId": "$requestId",
-                        "fromName": "$fromName",
-                        "fromPhone": "$fromPhone",
-                        "email": "contact@satey.app"
-                    }
-                """.trimIndent()
-
+                val jsonBody = """{"token": "$token", "type": "contact_request", "title": "📞 Contact Request", "body": "$fromName needs to contact you.", "requestId": "$requestId", "fromName": "$fromName", "fromPhone": "$fromPhone", "email": "contact@satey.app"}""".trimIndent()
                 val requestBody = jsonBody.toRequestBody("application/json".toMediaTypeOrNull())
-                val request = okhttp3.Request.Builder()
-                    .url("https://vasatey-notify-msg.vercel.app/api/sendNotification")
-                    .post(requestBody)
-                    .build()
-
-                val response = client.newCall(request).execute()
-                Log.d(TAG, "Vercel Response: ${response.code}")
-                response.close()
-            } catch (e: Exception) {
-                Log.e(TAG, "FCM Network error: ${e.message}")
-            }
+                val request = okhttp3.Request.Builder().url("https://vasatey-notify-msg.vercel.app/api/sendNotification").post(requestBody).build()
+                okhttp3.OkHttpClient().newCall(request).execute().close()
+            } catch (e: Exception) { }
         }
     }
 
@@ -218,18 +177,28 @@ class NearbyPeopleActivity : AppCompatActivity(), OnMapReadyCallback {
     private fun loadNearbyPeople() {
         lifecycleScope.launch {
             try {
+                // IMPORTANT: Clear the map completely before loading fresh data
+                googleMap.clear()
                 markers.forEach { it.remove() }
                 markers.clear()
                 markerUserMap.clear()
                 markerLocationMap.clear()
 
-                val locations = SupabaseClient.client.from("live_locations")
+                // Fetch all locations
+                val allLocations = SupabaseClient.client.from("live_locations")
                     .select()
                     .decodeList<com.sriox.vasateysec.models.LiveLocation>()
 
-                if (locations.isEmpty()) return@launch
+                if (allLocations.isEmpty()) return@launch
 
-                val userIds = locations.map { it.user_id }.distinct()
+                // --- CRITICAL FIX: Only take the LATEST location for each unique user ---
+                val latestLocations = allLocations.groupBy { it.user_id }
+                    .map { entry -> 
+                        entry.value.maxByOrNull { it.updated_at ?: "" } ?: entry.value.first() 
+                    }
+
+                // Fetch profiles for these users
+                val userIds = latestLocations.map { it.user_id }.distinct()
                 val userProfiles = SupabaseClient.client.from("users")
                     .select { filter { isIn("id", userIds) } }
                     .decodeList<User>()
@@ -237,9 +206,10 @@ class NearbyPeopleActivity : AppCompatActivity(), OnMapReadyCallback {
                 val userMap = userProfiles.associateBy { it.id }
                 val userIcon = bitmapDescriptorFromVector(this@NearbyPeopleActivity, R.drawable.ic_profile)
 
-                locations.forEach { loc ->
+                latestLocations.forEach { loc ->
                     val userData = userMap[loc.user_id]
                     if (userData != null) {
+                        Log.d(TAG, "Plotting ${userData.name} at ${loc.latitude}, ${loc.longitude}")
                         val marker = googleMap.addMarker(
                             MarkerOptions()
                                 .position(LatLng(loc.latitude, loc.longitude))
@@ -254,7 +224,7 @@ class NearbyPeopleActivity : AppCompatActivity(), OnMapReadyCallback {
                     }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Error: ${e.message}")
+                Log.e(TAG, "Error loading nearby people: ${e.message}")
             }
         }
     }

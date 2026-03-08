@@ -1,12 +1,20 @@
 package com.sriox.vasateysec
 
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Bundle
-import android.view.View
+import android.util.Log
+import android.widget.CompoundButton
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.work.*
+import com.google.android.gms.location.*
 import com.sriox.vasateysec.databinding.ActivityEditProfileBinding
+import com.sriox.vasateysec.models.LiveLocation
 import com.sriox.vasateysec.models.UserProfile
 import com.sriox.vasateysec.workers.LocationUpdateWorker
 import io.github.jan.supabase.gotrue.auth
@@ -18,24 +26,22 @@ class EditProfileActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityEditProfileBinding
     private var userId: String? = null
+    private lateinit var prefs: android.content.SharedPreferences
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityEditProfileBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        setupBottomNavigation()
+        prefs = getSharedPreferences("vasatey_settings", MODE_PRIVATE)
+
+        setupHeader()
         loadProfile()
+        setupSwitches()
+        setupBottomNavigation()
 
-        // Highlight Profile nav item
-        com.sriox.vasateysec.utils.BottomNavHelper.highlightActiveItem(
-            this,
-            com.sriox.vasateysec.utils.BottomNavHelper.NavItem.PROFILE
-        )
-
-        // Back button
-        binding.backButton.setOnClickListener {
-            finish()
+        binding.updateLocationButton.setOnClickListener {
+            updateCurrentLocation()
         }
 
         binding.saveButton.setOnClickListener {
@@ -51,14 +57,55 @@ class EditProfileActivity : AppCompatActivity() {
         }
 
         binding.logoutButton.setOnClickListener {
-            logout()
+            logoutUser()
         }
+    }
 
-        binding.updateLocationButton.setOnClickListener {
-            updateCurrentLocation()
+    private fun logoutUser() {
+        lifecycleScope.launch {
+            try {
+                SupabaseClient.client.auth.signOut()
+                com.sriox.vasateysec.utils.SessionManager.clearSession()
+                val intent = Intent(this@EditProfileActivity, LoginActivity::class.java)
+                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                startActivity(intent)
+                finish()
+            } catch (e: Exception) {
+                Toast.makeText(this@EditProfileActivity, "Logout failed: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
         }
+    }
 
-        binding.autoLocationSwitch.setOnCheckedChangeListener { _, isChecked ->
+    private fun setupHeader() {
+        binding.backButton.setOnClickListener {
+            finish()
+        }
+    }
+
+    private fun loadProfile() {
+        lifecycleScope.launch {
+            try {
+                val currentUser = SupabaseClient.client.auth.currentUserOrNull() ?: return@launch
+                userId = currentUser.id
+
+                val userProfile = SupabaseClient.client.from("users").select { filter { eq("id", userId!!) } }.decodeSingle<UserProfile>()
+
+                binding.nameInput.setText(userProfile.name)
+                binding.emailInput.setText(userProfile.email)
+                binding.phoneInput.setText(userProfile.phone)
+                binding.wakeWordInput.setText(userProfile.wake_word)
+                binding.cancelPasswordInput.setText(userProfile.cancel_password)
+                binding.autoLocationSwitch.isChecked = userProfile.is_auto_location_enabled
+
+                loadLastLocationTime(userProfile.last_location_updated_at)
+            } catch (e: Exception) {
+                Log.e("EditProfile", "Error loading profile: ${e.message}")
+            }
+        }
+    }
+
+    private fun setupSwitches() {
+        binding.autoLocationSwitch.setOnCheckedChangeListener { _: CompoundButton, isChecked: Boolean ->
             if (isChecked) {
                 checkLocationPermissionsAndStartWorker()
             } else {
@@ -68,16 +115,8 @@ class EditProfileActivity : AppCompatActivity() {
     }
 
     private fun checkLocationPermissionsAndStartWorker() {
-        if (androidx.core.content.ContextCompat.checkSelfPermission(
-                this,
-                android.Manifest.permission.ACCESS_FINE_LOCATION
-            ) != android.content.pm.PackageManager.PERMISSION_GRANTED
-        ) {
-            androidx.core.app.ActivityCompat.requestPermissions(
-                this,
-                arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION),
-                1001
-            )
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), 1001)
             binding.autoLocationSwitch.isChecked = false
         } else {
             startLocationWorker()
@@ -85,104 +124,15 @@ class EditProfileActivity : AppCompatActivity() {
     }
 
     private fun startLocationWorker() {
-        val constraints = Constraints.Builder()
-            .setRequiredNetworkType(NetworkType.CONNECTED)
-            .build()
-
-        val locationRequest = PeriodicWorkRequestBuilder<LocationUpdateWorker>(15, TimeUnit.MINUTES)
-            .setConstraints(constraints)
-            .build()
-
-        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
-            "location_update_worker",
-            ExistingPeriodicWorkPolicy.KEEP,
-            locationRequest
-        )
+        val constraints = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
+        val locationRequest = PeriodicWorkRequestBuilder<LocationUpdateWorker>(15, TimeUnit.MINUTES).setConstraints(constraints).build()
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork("location_update_worker", ExistingPeriodicWorkPolicy.KEEP, locationRequest)
         Toast.makeText(this, "Live Tracking Enabled", Toast.LENGTH_SHORT).show()
     }
 
     private fun cancelLocationWorker() {
         WorkManager.getInstance(this).cancelUniqueWork("location_update_worker")
         Toast.makeText(this, "Live Tracking Disabled", Toast.LENGTH_SHORT).show()
-    }
-
-    private fun setupBottomNavigation() {
-        val navGuardians = findViewById<android.widget.LinearLayout>(R.id.navGuardians)
-        val navHistory = findViewById<android.widget.LinearLayout>(R.id.navHistory)
-        val sosButton = findViewById<com.google.android.material.card.MaterialCardView>(R.id.sosButton)
-        val navGhistory = findViewById<android.widget.LinearLayout>(R.id.navGhistory)
-        val navProfile = findViewById<android.widget.LinearLayout>(R.id.navProfile)
-
-        navGuardians?.setOnClickListener {
-            startActivity(android.content.Intent(this, AddGuardianActivity::class.java))
-        }
-        navHistory?.setOnClickListener {
-            startActivity(android.content.Intent(this, AlertHistoryActivity::class.java))
-        }
-        sosButton?.setOnClickListener {
-            com.sriox.vasateysec.utils.SOSHelper.showSOSConfirmation(this)
-        }
-        navGhistory?.setOnClickListener {
-            startActivity(android.content.Intent(this, AlertHistoryActivity::class.java))
-        }
-        navProfile?.setOnClickListener { /* Already here */ }
-    }
-
-    private fun logout() {
-        lifecycleScope.launch {
-            try {
-                SupabaseClient.client.auth.signOut()
-                com.sriox.vasateysec.utils.SessionManager.clearSession()
-                val intent = android.content.Intent(this@EditProfileActivity, LoginActivity::class.java)
-                intent.flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK
-                startActivity(intent)
-                finish()
-            } catch (e: Exception) {
-                Toast.makeText(this@EditProfileActivity, "Logout failed: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
-    private fun loadProfile() {
-        lifecycleScope.launch {
-            try {
-                val currentUser = SupabaseClient.client.auth.currentUserOrNull()
-                if (currentUser == null) {
-                    Toast.makeText(this@EditProfileActivity, "User not logged in", Toast.LENGTH_SHORT).show()
-                    finish()
-                    return@launch
-                }
-
-                userId = currentUser.id
-                val userProfile = try {
-                    SupabaseClient.client.from("users")
-                        .select { filter { eq("id", currentUser.id) } }
-                        .decodeSingle<UserProfile>()
-                } catch (e: Exception) {
-                    UserProfile(
-                        id = currentUser.id,
-                        name = currentUser.email?.substringBefore("@") ?: "User",
-                        email = currentUser.email ?: "",
-                        phone = "",
-                        wake_word = "help me",
-                        cancel_password = "",
-                        is_auto_location_enabled = false
-                    )
-                }
-
-                binding.nameInput.setText(userProfile.name ?: "")
-                binding.emailInput.setText(userProfile.email ?: "")
-                binding.phoneInput.setText(userProfile.phone ?: "")
-                binding.wakeWordInput.setText(userProfile.wake_word ?: "help me")
-                binding.cancelPasswordInput.setText(userProfile.cancel_password ?: "")
-                binding.autoLocationSwitch.isChecked = userProfile.is_auto_location_enabled
-
-                loadLastLocationTime(userProfile.last_location_updated_at)
-
-            } catch (e: Exception) {
-                Toast.makeText(this@EditProfileActivity, "Failed to load profile", Toast.LENGTH_SHORT).show()
-            }
-        }
     }
 
     private fun loadLastLocationTime(lastUpdated: String?) {
@@ -207,59 +157,75 @@ class EditProfileActivity : AppCompatActivity() {
     }
 
     private fun updateCurrentLocation() {
-        binding.updateLocationButton.isEnabled = false
-        binding.updateLocationButton.text = "Updating..."
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), 1001)
+            return
+        }
 
+        binding.updateLocationButton.isEnabled = false
+        binding.updateLocationButton.text = "Detecting GPS..."
+
+        val fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+        
+        // Request a FRESH location instead of using lastLocation
+        val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 1000)
+            .setMaxUpdates(1)
+            .build()
+
+        val locationCallback = object : LocationCallback() {
+            override fun onLocationResult(locationResult: LocationResult) {
+                val location = locationResult.lastLocation
+                if (location != null) {
+                    syncLocationToDatabase(location)
+                } else {
+                    Toast.makeText(this@EditProfileActivity, "GPS timeout. Try again.", Toast.LENGTH_SHORT).show()
+                    binding.updateLocationButton.isEnabled = true
+                    binding.updateLocationButton.text = "Update Now"
+                }
+            }
+        }
+
+        fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback, mainLooper)
+    }
+
+    private fun syncLocationToDatabase(location: android.location.Location) {
         lifecycleScope.launch {
             try {
-                if (android.content.pm.PackageManager.PERMISSION_GRANTED != 
-                    androidx.core.content.ContextCompat.checkSelfPermission(
-                        this@EditProfileActivity,
-                        android.Manifest.permission.ACCESS_FINE_LOCATION
-                    )) {
-                    androidx.core.app.ActivityCompat.requestPermissions(
-                        this@EditProfileActivity,
-                        arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION),
-                        1001
-                    )
-                    binding.updateLocationButton.isEnabled = true
-                    binding.updateLocationButton.text = "Update Location"
-                    return@launch
-                }
+                val currentUser = SupabaseClient.client.auth.currentUserOrNull() ?: return@launch
+                val timestamp = java.time.Instant.now().toString()
 
-                val fusedLocationClient = com.google.android.gms.location.LocationServices.getFusedLocationProviderClient(this@EditProfileActivity)
-                fusedLocationClient.lastLocation.addOnSuccessListener { location ->
-                    if (location != null) {
-                        lifecycleScope.launch {
-                            try {
-                                val currentUser = SupabaseClient.client.auth.currentUserOrNull()
-                                if (currentUser == null) return@launch
+                // 1. Update users table
+                SupabaseClient.client.from("users").update({
+                    set("last_latitude", location.latitude)
+                    set("last_longitude", location.longitude)
+                    set("last_location_updated_at", timestamp)
+                }) { filter { eq("id", currentUser.id) } }
 
-                                SupabaseClient.client.from("users").update({
-                                    set("last_latitude", location.latitude)
-                                    set("last_longitude", location.longitude)
-                                    set("last_location_updated_at", java.time.Instant.now().toString())
-                                }) { filter { eq("id", currentUser.id) } }
-
-                                Toast.makeText(this@EditProfileActivity, "✅ Location updated!", Toast.LENGTH_SHORT).show()
-                                loadLastLocationTime(java.time.Instant.now().toString())
-                            } catch (e: Exception) {
-                                Toast.makeText(this@EditProfileActivity, "Failed to update: ${e.message}", Toast.LENGTH_SHORT).show()
-                            } finally {
-                                binding.updateLocationButton.isEnabled = true
-                                binding.updateLocationButton.text = "Update Location"
-                            }
-                        }
-                    } else {
-                        Toast.makeText(this@EditProfileActivity, "Unable to get location", Toast.LENGTH_SHORT).show()
-                        binding.updateLocationButton.isEnabled = true
-                        binding.updateLocationButton.text = "Update Location"
+                // 2. Update live_locations table (CLEAN SYNC)
+                // Delete first to avoid unique constraint (duplicate key) errors
+                try {
+                    SupabaseClient.client.from("live_locations").delete {
+                        filter { eq("user_id", currentUser.id) }
                     }
-                }
+                } catch (e: Exception) { /* Might not exist */ }
+
+                val liveLocation = LiveLocation(
+                    user_id = currentUser.id,
+                    latitude = location.latitude,
+                    longitude = location.longitude,
+                    accuracy = location.accuracy,
+                    updated_at = timestamp
+                )
+                SupabaseClient.client.from("live_locations").insert(liveLocation)
+
+                Toast.makeText(this@EditProfileActivity, "✅ Location updated!", Toast.LENGTH_SHORT).show()
+                loadLastLocationTime(timestamp)
             } catch (e: Exception) {
-                Toast.makeText(this@EditProfileActivity, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                Log.e("EditProfile", "Sync failed: ${e.message}")
+                Toast.makeText(this@EditProfileActivity, "Sync failed: ${e.message}", Toast.LENGTH_SHORT).show()
+            } finally {
                 binding.updateLocationButton.isEnabled = true
-                binding.updateLocationButton.text = "Update Location"
+                binding.updateLocationButton.text = "Update Now"
             }
         }
     }
@@ -305,5 +271,36 @@ class EditProfileActivity : AppCompatActivity() {
                 binding.saveButton.isEnabled = true
             }
         }
+    }
+
+    private fun setupBottomNavigation() {
+        val navGuardians = findViewById<android.widget.LinearLayout>(R.id.navGuardians)
+        val navHistory = findViewById<android.widget.LinearLayout>(R.id.navHistory)
+        val sosButton = findViewById<com.google.android.material.card.MaterialCardView>(R.id.sosButton)
+        val navGhistory = findViewById<android.widget.LinearLayout>(R.id.navGhistory)
+        val navProfile = findViewById<android.widget.LinearLayout>(R.id.navProfile)
+
+        navGuardians?.setOnClickListener {
+            val intent = Intent(this, AddGuardianActivity::class.java)
+            intent.flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            startActivity(intent)
+            finish()
+        }
+        navHistory?.setOnClickListener {
+            val intent = Intent(this, AlertHistoryActivity::class.java)
+            intent.flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            startActivity(intent)
+            finish()
+        }
+        sosButton?.setOnClickListener {
+            com.sriox.vasateysec.utils.SOSHelper.showSOSConfirmation(this)
+        }
+        navGhistory?.setOnClickListener {
+            val intent = Intent(this, GuardianMapActivity::class.java)
+            intent.flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            startActivity(intent)
+            finish()
+        }
+        navProfile?.setOnClickListener { /* Already here */ }
     }
 }

@@ -30,10 +30,6 @@ class SafePlacesSelectionActivity : AppCompatActivity() {
             startActivity(Intent(this, PlaceReviewsActivity::class.java))
         }
 
-        binding.cardAISafety.setOnClickListener {
-            startActivity(Intent(this, AiChatActivity::class.java))
-        }
-
         setupBottomNavigation()
     }
 

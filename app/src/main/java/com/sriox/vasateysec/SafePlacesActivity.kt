@@ -90,7 +90,6 @@ class SafePlacesActivity : AppCompatActivity(), OnMapReadyCallback {
             true
         }
 
-        // Allow user to select a place by clicking on the map
         googleMap.setOnMapClickListener { latLng ->
             selectedLatLng = latLng
             showAddPlaceForm(latLng)
@@ -104,8 +103,6 @@ class SafePlacesActivity : AppCompatActivity(), OnMapReadyCallback {
         binding.tvLocationInfo.text = "Selected: ${String.format("%.4f", latLng.latitude)}, ${String.format("%.4f", latLng.longitude)}"
         binding.addPlaceFormCard.visibility = View.VISIBLE
         binding.addSafePlaceFab.hide()
-        
-        // Auto-scroll or zoom to selected point if needed
         googleMap.animateCamera(CameraUpdateFactory.newLatLng(latLng))
     }
 
@@ -119,6 +116,17 @@ class SafePlacesActivity : AppCompatActivity(), OnMapReadyCallback {
         sheetBinding.tvSheetPlaceName.text = place.name
         sheetBinding.tvSheetDescription.text = place.description ?: "No description available"
 
+        // Check ownership for delete button
+        val currentUser = SupabaseClient.client.auth.currentUserOrNull()
+        if (currentUser != null && place.created_by == currentUser.id) {
+            sheetBinding.btnDeleteSafePlace.visibility = View.VISIBLE
+            sheetBinding.btnDeleteSafePlace.setOnClickListener {
+                deleteSafePlace(place, dialog)
+            }
+        } else {
+            sheetBinding.btnDeleteSafePlace.visibility = View.GONE
+        }
+
         sheetBinding.btnStreetView.setOnClickListener {
             showWebStreetView(place.latitude, place.longitude)
             dialog.dismiss()
@@ -127,37 +135,31 @@ class SafePlacesActivity : AppCompatActivity(), OnMapReadyCallback {
         dialog.show()
     }
 
+    private fun deleteSafePlace(place: SafePlace, dialog: BottomSheetDialog) {
+        lifecycleScope.launch {
+            try {
+                SupabaseClient.client.from("safe_places").delete {
+                    filter { eq("id", place.id ?: "") }
+                }
+                Toast.makeText(this@SafePlacesActivity, "Safe place removed", Toast.LENGTH_SHORT).show()
+                dialog.dismiss()
+                loadSafePlaces()
+            } catch (e: Exception) {
+                Toast.makeText(this@SafePlacesActivity, "Delete failed", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     private fun showWebStreetView(lat: Double, lng: Double) {
         binding.streetViewCard.visibility = View.VISIBLE
-        
         val url = "https://maps.google.com/maps?q=&layer=c&cbll=$lat,$lng&cbp=11,0,0,0,0&output=svembed"
-        
-        val html = """
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <style>
-                    body, html { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; background-color: #000; }
-                    iframe { border: none; height: 100%; width: 100%; }
-                </style>
-            </head>
-            <body>
-                <iframe src="$url" allowfullscreen></iframe>
-            </body>
-            </html>
-        """.trimIndent()
-        
+        val html = "<html><head><style>body,html{margin:0;padding:0;height:100%;width:100%;overflow:hidden;background:#000;}iframe{border:none;height:100%;width:100%;}</style></head><body><iframe src=\"$url\" allowfullscreen></iframe></body></html>"
         binding.streetViewWebView.loadDataWithBaseURL("https://maps.google.com", html, "text/html", "UTF-8", null)
     }
 
     private fun enableMyLocation() {
-        if (androidx.core.content.ContextCompat.checkSelfPermission(
-                this,
-                android.Manifest.permission.ACCESS_FINE_LOCATION
-            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-        ) {
+        if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
             googleMap.isMyLocationEnabled = true
-            
             val fusedLocationClient = com.google.android.gms.location.LocationServices.getFusedLocationProviderClient(this)
             fusedLocationClient.lastLocation.addOnSuccessListener { location ->
                 if (location != null) {
@@ -168,7 +170,7 @@ class SafePlacesActivity : AppCompatActivity(), OnMapReadyCallback {
         }
     }
 
-    private fun bitmapDescriptorFromVector(context: Context, vectorResId: Int, scaleFactor: Float = 1.5f): BitmapDescriptor? {
+    private fun bitmapDescriptorFromVector(context: Context, vectorResId: Int, scaleFactor: Float = 2.0f): BitmapDescriptor? {
         return ContextCompat.getDrawable(context, vectorResId)?.run {
             val width = (intrinsicWidth * scaleFactor).toInt()
             val height = (intrinsicHeight * scaleFactor).toInt()
@@ -182,140 +184,59 @@ class SafePlacesActivity : AppCompatActivity(), OnMapReadyCallback {
     private fun loadSafePlaces() {
         lifecycleScope.launch {
             try {
-                val places = SupabaseClient.client.from("safe_places")
-                    .select()
-                    .decodeList<SafePlace>()
-
+                googleMap.clear()
+                val places = SupabaseClient.client.from("safe_places").select().decodeList<SafePlace>()
                 markerPlaceMap.clear()
                 val safePlaceIcon = bitmapDescriptorFromVector(this@SafePlacesActivity, R.drawable.ic_safe_place, 2.0f)
-                
                 places.forEach { place ->
                     val pos = LatLng(place.latitude, place.longitude)
-                    
-                    val markerOptions = MarkerOptions()
-                        .position(pos)
-                        .title(place.name)
-                    
-                    if (safePlaceIcon != null) {
-                        markerOptions.icon(safePlaceIcon)
-                    } else {
-                        markerOptions.icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE))
-                    }
-                    
-                    val marker = googleMap.addMarker(markerOptions)
-                    marker?.let {
-                        markerPlaceMap[it.id] = place
-                    }
+                    val marker = googleMap.addMarker(MarkerOptions().position(pos).title(place.name).icon(safePlaceIcon ?: BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE)))
+                    marker?.let { markerPlaceMap[it.id] = place }
                 }
-            } catch (e: Exception) {
-                android.util.Log.e("SafePlaces", "Error loading places", e)
-            }
+            } catch (e: Exception) { }
         }
     }
 
     private fun setupFab() {
-        // FAB now uses current location by default if clicked
         binding.addSafePlaceFab.setOnClickListener {
             if (currentLocation == null) {
-                Toast.makeText(this, "Waiting for current location...", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Waiting for location...", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
             selectedLatLng = currentLocation
             showAddPlaceForm(currentLocation!!)
         }
-
         binding.btnCancelAdd.setOnClickListener {
             binding.addPlaceFormCard.visibility = View.GONE
             binding.addSafePlaceFab.show()
             selectedLatLng = null
         }
-
-        binding.btnSavePlace.setOnClickListener {
-            saveSafePlace()
-        }
+        binding.btnSavePlace.setOnClickListener { saveSafePlace() }
     }
 
     private fun saveSafePlace() {
         val name = binding.etPlaceName.text.toString().trim()
         val description = binding.etPlaceDescription.text.toString().trim()
         val location = selectedLatLng
-
-        if (name.isEmpty() || location == null) {
-            Toast.makeText(this, "Please enter a name and select a location on the map", Toast.LENGTH_SHORT).show()
-            return
-        }
+        if (name.isEmpty() || location == null) return
 
         lifecycleScope.launch {
             try {
                 val currentUser = SupabaseClient.client.auth.currentUserOrNull()
-                val newPlace = SafePlace(
-                    name = name,
-                    description = description,
-                    latitude = location.latitude,
-                    longitude = location.longitude,
-                    created_by = currentUser?.id,
-                    place_type = "safe_house"
-                )
-
+                val newPlace = SafePlace(name = name, description = description, latitude = location.latitude, longitude = location.longitude, created_by = currentUser?.id)
                 SupabaseClient.client.from("safe_places").insert(newPlace)
-                
-                Toast.makeText(this@SafePlacesActivity, "Safe place added successfully!", Toast.LENGTH_SHORT).show()
-                
-                // Reset UI
                 binding.etPlaceName.text?.clear()
                 binding.etPlaceDescription.text?.clear()
                 binding.addPlaceFormCard.visibility = View.GONE
                 binding.addSafePlaceFab.show()
-                selectedLatLng = null
-                
-                // Refresh markers
-                googleMap.clear()
                 loadSafePlaces()
-            } catch (e: Exception) {
-                android.util.Log.e("SafePlaces", "Error saving place", e)
-                Toast.makeText(this@SafePlacesActivity, "Failed to save place: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
+            } catch (e: Exception) { }
         }
     }
 
     private fun setupBottomNavigation() {
-        val navGuardians = findViewById<android.widget.LinearLayout>(R.id.navGuardians)
-        val navHistory = findViewById<android.widget.LinearLayout>(R.id.navHistory)
         val sosButton = findViewById<com.google.android.material.card.MaterialCardView>(R.id.sosButton)
-        val navGhistory = findViewById<android.widget.LinearLayout>(R.id.navGhistory)
-        val navProfile = findViewById<android.widget.LinearLayout>(R.id.navProfile)
-
-        navGuardians?.setOnClickListener {
-            val intent = android.content.Intent(this, AddGuardianActivity::class.java)
-            intent.flags = android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP or android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP
-            startActivity(intent)
-            finish()
-        }
-
-        navHistory?.setOnClickListener {
-            val intent = android.content.Intent(this, AlertHistoryActivity::class.java)
-            intent.flags = android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP or android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP
-            startActivity(intent)
-            finish()
-        }
-
-        sosButton?.setOnClickListener {
-            com.sriox.vasateysec.utils.SOSHelper.showSOSConfirmation(this)
-        }
-
-        navGhistory?.setOnClickListener {
-            val intent = android.content.Intent(this, GuardianMapActivity::class.java)
-            intent.flags = android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP or android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP
-            startActivity(intent)
-            finish()
-        }
-
-        navProfile?.setOnClickListener {
-            val intent = android.content.Intent(this, EditProfileActivity::class.java)
-            intent.flags = android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP or android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP
-            startActivity(intent)
-            finish()
-        }
+        sosButton?.setOnClickListener { com.sriox.vasateysec.utils.SOSHelper.showSOSConfirmation(this) }
     }
 
     override fun onDestroy() {

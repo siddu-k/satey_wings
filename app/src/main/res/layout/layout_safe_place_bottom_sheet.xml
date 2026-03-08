@@ -14,14 +14,32 @@
         android:layout_marginBottom="24dp"
         android:background="#40FFFFFF" />
 
-    <TextView
-        android:id="@+id/tvSheetPlaceName"
-        android:layout_width="wrap_content"
+    <LinearLayout
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Safe Place Name"
-        android:textColor="@color/text_primary"
-        android:textSize="22sp"
-        android:textStyle="bold" />
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:id="@+id/tvSheetPlaceName"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Safe Place Name"
+            android:textColor="@color/text_primary"
+            android:textSize="22sp"
+            android:textStyle="bold" />
+
+        <ImageView
+            android:id="@+id/btnDeleteSafePlace"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:src="@android:drawable/ic_menu_delete"
+            android:tint="@color/pink"
+            android:padding="8dp"
+            android:visibility="gone"
+            android:background="?attr/selectableItemBackgroundBorderless" />
+    </LinearLayout>
 
     <TextView
         android:id="@+id/tvSheetDescription"

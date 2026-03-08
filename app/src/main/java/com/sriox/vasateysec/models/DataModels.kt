@@ -127,3 +127,12 @@ data class PlaceReview(
     val rating: Float,
     val created_at: String? = null
 )
+
+@Serializable
+data class SmsContact(
+    val id: String? = null,
+    val user_id: String,
+    val name: String,
+    val phone: String,
+    val created_at: String? = null
+)
