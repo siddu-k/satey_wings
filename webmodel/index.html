@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SATEY - Emergency Response System</title>
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+    <div class="container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <!-- Header -->
+            <div class="header">
+                <div class="logo">
+                    <div class="logo-icon">S</div>
+                    <div class="logo-text">
+                        <h1>SATEY</h1>
+                        <p>Emergency Response System</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Statistics -->
+            <div class="stats">
+                <div class="stat-card">
+                    <div class="stat-label">Total Alerts</div>
+                    <div class="stat-value" id="totalAlerts">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Active Now</div>
+                    <div class="stat-value" id="activeAlerts">0</div>
+                </div>
+            </div>
+
+            <!-- Status Filter -->
+            <div class="filter-section">
+                <div class="filter-header">
+                    <span>STATUS FILTER</span>
+                    <button class="reset-btn" id="resetFilter">Reset</button>
+                </div>
+                <select id="statusFilter" class="filter-select">
+                    <option value="all">All Alerts</option>
+                    <option value="sent">Sent</option>
+                    <option value="received">Acknowledged/Resolved</option>
+                </select>
+            </div>
+
+            <!-- Nearby Helpers List (Hidden by default) -->
+            <div class="nearby-section" id="nearbySection" style="display: none;">
+                <div class="filter-header">
+                    <span>NEARBY HELPERS (5KM)</span>
+                    <button class="reset-btn" id="hideNearby">Back to Alerts</button>
+                </div>
+                <div class="nearby-list" id="nearbyList">
+                    <!-- Nearby helpers will be added here -->
+                </div>
+            </div>
+
+            <!-- Alerts List -->
+            <div class="alerts-list" id="alertsList">
+                <!-- Alert items will be dynamically added here -->
+            </div>
+
+            <!-- Update Button -->
+            <button class="update-btn" id="updateBtn">UPDATE</button>
+        </aside>
+
+        <!-- Map Container -->
+        <main class="map-container">
+            <div id="map"></div>
+
+            <!-- Alert Details Popup (hidden by default) -->
+            <div class="alert-popup" id="alertPopup" style="display: none;">
+                <button class="popup-close" id="closePopup">&times;</button>
+                <div class="popup-header">
+                    <span class="popup-icon">⚠️</span>
+                    <h2>Emergency Alert</h2>
+                </div>
+                <div class="popup-content">
+                    <div class="popup-row">
+                        <div class="popup-field">
+                            <label>Name</label>
+                            <span id="popupName">-</span>
+                        </div>
+                        <div class="popup-field">
+                            <label>Phone</label>
+                            <span id="popupPhone">-</span>
+                        </div>
+                    </div>
+                    <div class="popup-row">
+                        <div class="popup-field full">
+                            <label>Email</label>
+                            <span id="popupEmail">-</span>
+                        </div>
+                    </div>
+                    <div class="popup-row">
+                        <div class="popup-field">
+                            <label>Alert Type</label>
+                            <span id="popupType">-</span>
+                        </div>
+                        <div class="popup-field">
+                            <label>Status</label>
+                            <span class="status-badge" id="popupStatus">-</span>
+                        </div>
+                    </div>
+                    <div class="popup-row">
+                        <div class="popup-field full">
+                            <label>Timestamp</label>
+                            <span id="popupTime">-</span>
+                        </div>
+                    </div>
+                    <div class="popup-photos" id="popupPhotos">
+                        <div class="photos-header">
+                            <span class="photo-icon">📷</span>
+                            <span>PHOTOS</span>
+                        </div>
+                        <div class="photos-grid">
+                            <div class="photo-item">
+                                <img id="frontPhoto" src="" alt="Front View">
+                                <span>Front View</span>
+                            </div>
+                            <div class="photo-item">
+                                <img id="backPhoto" src="" alt="Back View">
+                                <span>Back View</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <!-- Supabase JS -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <!-- Custom JS -->
+    <script src="js/supabase.js"></script>
+    <script src="js/map.js"></script>
+    <script src="js/app.js"></script>
+</body>
+
+</html>
