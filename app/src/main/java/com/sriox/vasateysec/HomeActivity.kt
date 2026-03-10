@@ -6,35 +6,44 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
-import android.location.LocationManager
+import android.content.res.ColorStateList
+import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
+import android.widget.AdapterView
 import android.widget.ArrayAdapter
+import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.ActionBarDrawerToggle
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import androidx.core.view.GravityCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.card.MaterialCardView
 import com.google.android.material.navigation.NavigationView
 import com.sriox.vasateysec.databinding.ActivityHomeBinding
 import com.sriox.vasateysec.models.Helpline
 import com.sriox.vasateysec.models.SmsContact
 import com.sriox.vasateysec.models.UserProfile
 import com.sriox.vasateysec.services.BleGuardianService
+import com.sriox.vasateysec.utils.BottomNavHelper
 import com.sriox.vasateysec.utils.FCMTokenManager
+import com.sriox.vasateysec.utils.SOSHelper
+import com.sriox.vasateysec.utils.SessionManager
 import com.sriox.vasateysec.utils.SmsHelper
 import io.github.jan.supabase.gotrue.auth
 import io.github.jan.supabase.postgrest.from
@@ -51,19 +60,18 @@ class HomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
     private var allHelplines = listOf<Helpline>()
     private lateinit var helplineAdapter: HelplineAdapter
     private var smsContacts = listOf<SmsContact>()
+    private var isSosActive = false
 
     private val watchStatusReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             val status = intent?.getStringExtra(BleGuardianService.EXTRA_STATUS)
-            android.util.Log.d("HomeActivity", "Received Watch Status: $status")
+            Log.d("HomeActivity", "Received Watch Status: $status")
             updateHardwareStatusUi(status)
         }
     }
 
     companion object {
         private const val RECORD_AUDIO_PERMISSION_CODE = 123
-        private const val LOCATION_PERMISSION_CODE = 124
-        private const val NOTIFICATION_PERMISSION_CODE = 125
         private const val ALL_PERMISSIONS_CODE = 126
     }
 
@@ -77,9 +85,9 @@ class HomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
         setupHelplineSection()
         setupRealtimeContactListener()
         
-        com.sriox.vasateysec.utils.BottomNavHelper.highlightActiveItem(
+        BottomNavHelper.highlightActiveItem(
             this,
-            com.sriox.vasateysec.utils.BottomNavHelper.NavItem.NONE
+            BottomNavHelper.NavItem.NONE
         )
         
         ensureSessionValid()
@@ -114,7 +122,6 @@ class HomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
     private fun loadSmsContactsForSpinner() {
         lifecycleScope.launch {
             try {
-                // Try database first
                 val currentUser = SupabaseClient.client.auth.currentUserOrNull()
                 if (currentUser != null) {
                     smsContacts = SupabaseClient.client.from("sms_contacts")
@@ -122,7 +129,6 @@ class HomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
                         .decodeList<SmsContact>()
                 }
                 
-                // Fallback to local
                 if (smsContacts.isEmpty()) {
                     smsContacts = SmsHelper.getFromLocalStorage(this@HomeActivity)
                 }
@@ -133,7 +139,6 @@ class HomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
                     adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
                     binding.spinnerCallRecipient.adapter = adapter
                     
-                    // Restore selection
                     val savedPhone = getSharedPreferences("alert_settings", MODE_PRIVATE).getString("auto_call_recipient", null)
                     val index = smsContacts.indexOfFirst { it.phone == savedPhone }
                     if (index >= 0) binding.spinnerCallRecipient.setSelection(index)
@@ -155,28 +160,39 @@ class HomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
 
     private fun updateHardwareStatusUi(status: String?) {
         binding.hardwareStatusLayout.visibility = View.VISIBLE
+        
+        // Lock UI in SOS state until "0" (CONNECTED) or DISCONNECTED is received
+        if (isSosActive) {
+            if (status == BleGuardianService.STATUS_CONNECTED || status == BleGuardianService.STATUS_DISCONNECTED) {
+                isSosActive = false
+            } else {
+                return // Stay in SOS ACTIVE state
+            }
+        }
+
         when (status) {
             BleGuardianService.STATUS_CONNECTING -> {
-                binding.hardwareStatusDot.backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.YELLOW)
+                binding.hardwareStatusDot.backgroundTintList = ColorStateList.valueOf(Color.YELLOW)
                 binding.hardwareStatusText.text = "Syncing..."
             }
             BleGuardianService.STATUS_CONNECTED -> {
-                binding.hardwareStatusDot.backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.GREEN)
+                binding.hardwareStatusDot.backgroundTintList = ColorStateList.valueOf(Color.GREEN)
                 binding.hardwareStatusText.text = "Watch Online"
             }
             BleGuardianService.STATUS_SOS_ACTIVE -> {
-                binding.hardwareStatusDot.backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.RED)
+                isSosActive = true
+                binding.hardwareStatusDot.backgroundTintList = ColorStateList.valueOf(Color.RED)
                 binding.hardwareStatusText.text = "SOS ACTIVE"
             }
             BleGuardianService.STATUS_GPS_RECEIVED -> {
-                binding.hardwareStatusDot.backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.BLUE)
+                binding.hardwareStatusDot.backgroundTintList = ColorStateList.valueOf(Color.BLUE)
                 binding.hardwareStatusText.text = "Location Fix"
                 binding.hardwareStatusDot.postDelayed({
-                    updateHardwareStatusUi(BleGuardianService.STATUS_CONNECTED)
-                }, 1000)
+                    if (!isSosActive) updateHardwareStatusUi(BleGuardianService.STATUS_CONNECTED)
+                }, 1500)
             }
             else -> {
-                binding.hardwareStatusDot.backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.GRAY)
+                binding.hardwareStatusDot.backgroundTintList = ColorStateList.valueOf(Color.GRAY)
                 binding.hardwareStatusText.text = "Searching..."
             }
         }
@@ -206,13 +222,13 @@ class HomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
                     }
                 }
             } catch (e: Exception) {
-                android.util.Log.e("HomeActivity", "Realtime error: ${e.message}")
+                Log.e("HomeActivity", "Realtime error: ${e.message}")
             }
         }
     }
 
     private fun showInAppNotification(name: String, requestId: String) {
-        val dialog = androidx.appcompat.app.AlertDialog.Builder(this)
+        val dialog = AlertDialog.Builder(this)
             .setTitle("📞 Contact Request")
             .setMessage("$name wants to contact you. Open details?")
             .setPositiveButton("View") { _, _ ->
@@ -224,7 +240,7 @@ class HomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
             .setNegativeButton("Dismiss", null)
             .show()
             
-        dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setTextColor(getColor(R.color.golden))
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(getColor(R.color.golden))
     }
 
     private fun setupHelplineSection() {
@@ -237,11 +253,6 @@ class HomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
                 binding.helplineExpandArea.visibility = View.GONE
                 binding.helplineArrow.setImageResource(R.drawable.ic_arrow_down)
             }
-        }
-
-        helplineAdapter = HelplineAdapter(mutableListOf()) { helpline ->
-            val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${helpline.number}"))
-            startActivity(intent)
         }
 
         helplineAdapter = HelplineAdapter(mutableListOf()) { helpline ->
@@ -276,7 +287,7 @@ class HomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
                     helplineAdapter.updateData(allHelplines)
                 }
             } catch (e: Exception) {
-                android.util.Log.e("HomeActivity", "Error loading helplines", e)
+                Log.e("HomeActivity", "Error loading helplines", e)
             }
         }
     }
@@ -297,23 +308,12 @@ class HomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
     }
 
     private fun ensureSessionValid() {
-        if (!com.sriox.vasateysec.utils.SessionManager.isLoggedIn()) {
+        if (!SessionManager.isLoggedIn()) {
             val intent = Intent(this, LoginActivity::class.java)
             intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
             startActivity(intent)
             finish()
             return
-        }
-        
-        lifecycleScope.launch {
-            try {
-                val currentUser = SupabaseClient.client.auth.currentUserOrNull()
-                if (currentUser != null) {
-                    android.util.Log.d("HomeActivity", "Supabase session active for: ${currentUser.id}")
-                }
-            } catch (e: Exception) {
-                android.util.Log.w("HomeActivity", "Session check failed: ${e.message}")
-            }
         }
     }
 
@@ -331,7 +331,6 @@ class HomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
             }
         }
         
-        // Network and Offline toggle persistence
         val alertPrefs = getSharedPreferences("alert_settings", MODE_PRIVATE)
         binding.switchNetworkAlert.isChecked = alertPrefs.getBoolean("network_alert_enabled", true)
         binding.switchSmsAlert.isChecked = alertPrefs.getBoolean("sms_alert_enabled", false)
@@ -362,15 +361,14 @@ class HomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
             }
         }
 
-        binding.spinnerCallRecipient.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
+        binding.spinnerCallRecipient.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
                 val selectedPhone = smsContacts[position].phone
                 alertPrefs.edit().putString("auto_call_recipient", selectedPhone).apply()
             }
-            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
 
-        // Link AI assistant button
         binding.cardAISafetyHome.setOnClickListener {
             startActivity(Intent(this, AiChatActivity::class.java))
         }
@@ -401,7 +399,7 @@ class HomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
     }
     
     private fun showLogoutDialog() {
-        androidx.appcompat.app.AlertDialog.Builder(this)
+        AlertDialog.Builder(this)
             .setTitle("Logout")
             .setMessage("Are you sure you want to logout?")
             .setPositiveButton("Yes") { _, _ ->
@@ -412,11 +410,11 @@ class HomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
     }
     
     private fun setupBottomNavigation() {
-        val navGuardians = findViewById<android.widget.LinearLayout>(R.id.navGuardians)
-        val navHistory = findViewById<android.widget.LinearLayout>(R.id.navHistory)
-        val sosButton = findViewById<com.google.android.material.card.MaterialCardView>(R.id.sosButton)
-        val navGhistory = findViewById<android.widget.LinearLayout>(R.id.navGhistory)
-        val navProfile = findViewById<android.widget.LinearLayout>(R.id.navProfile)
+        val navGuardians = findViewById<LinearLayout>(R.id.navGuardians)
+        val navHistory = findViewById<LinearLayout>(R.id.navHistory)
+        val sosButton = findViewById<MaterialCardView>(R.id.sosButton)
+        val navGhistory = findViewById<LinearLayout>(R.id.navGhistory)
+        val navProfile = findViewById<LinearLayout>(R.id.navProfile)
         
         navGuardians?.setOnClickListener {
             val intent = Intent(this, AddGuardianActivity::class.java)
@@ -431,7 +429,7 @@ class HomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
         }
         
         sosButton?.setOnClickListener {
-            com.sriox.vasateysec.utils.SOSHelper.showSOSConfirmation(this)
+            SOSHelper.showSOSConfirmation(this)
         }
         
         navGhistory?.setOnClickListener {
@@ -546,7 +544,7 @@ class HomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
             try {
                 FCMTokenManager.deactivateFCMToken(this@HomeActivity)
                 SupabaseClient.client.auth.signOut()
-                com.sriox.vasateysec.utils.SessionManager.clearSession()
+                SessionManager.clearSession()
                 val intent = Intent(this@HomeActivity, LoginActivity::class.java)
                 intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
                 startActivity(intent)
@@ -582,14 +580,13 @@ class HomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
         super.onBackPressed()
     }
 
-    // Helpline RecyclerView Adapter
     class HelplineAdapter(private var list: MutableList<Helpline>, private val onCallClick: (Helpline) -> Unit) :
         RecyclerView.Adapter<HelplineAdapter.ViewHolder>() {
 
         class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
             val name: TextView = view.findViewById(R.id.tvHelplineName)
             val number: TextView = view.findViewById(R.id.tvHelplineNumber)
-            val callBtn: android.widget.ImageView = view.findViewById(R.id.btnCallHelpline)
+            val callBtn: ImageView = view.findViewById(R.id.btnCallHelpline)
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {

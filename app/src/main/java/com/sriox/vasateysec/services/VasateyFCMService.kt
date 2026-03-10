@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.graphics.Color
 import android.media.AudioAttributes
 import android.media.AudioManager
 import android.media.ToneGenerator
@@ -14,8 +15,12 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
+import com.sriox.vasateysec.AlertConfirmationActivity
+import com.sriox.vasateysec.ContactDetailActivity
+import com.sriox.vasateysec.EmergencyAlertViewerActivity
 import com.sriox.vasateysec.R
 import com.sriox.vasateysec.utils.FCMTokenManager
+import com.sriox.vasateysec.utils.LiveLocationHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -47,7 +52,7 @@ class VasateyFCMService : FirebaseMessagingService() {
                 val messageType = data["type"] ?: "alert"
                 when (messageType) {
                     "location_request" -> {
-                        com.sriox.vasateysec.utils.LiveLocationHelper.handleLocationRequest(applicationContext, data)
+                        LiveLocationHelper.handleLocationRequest(applicationContext, data)
                     }
                     "contact_request" -> {
                         handleContactRequest(data)
@@ -65,7 +70,7 @@ class VasateyFCMService : FirebaseMessagingService() {
         val requestId = data["requestId"] ?: ""
         val fromName = data["fromName"] ?: "Someone"
         
-        val intent = Intent(this, com.sriox.vasateysec.ContactDetailActivity::class.java).apply {
+        val intent = Intent(this, ContactDetailActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
             putExtra("request_id", requestId)
         }
@@ -84,7 +89,7 @@ class VasateyFCMService : FirebaseMessagingService() {
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
-            .setColor(android.graphics.Color.parseColor("#FFD700"))
+            .setColor(Color.parseColor("#FFD700"))
             .build()
 
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -114,7 +119,7 @@ class VasateyFCMService : FirebaseMessagingService() {
             playEmergencySirenEffect()
         }
 
-        val intent = Intent(this, com.sriox.vasateysec.EmergencyAlertViewerActivity::class.java).apply {
+        val intent = Intent(this, EmergencyAlertViewerActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK
             putExtra("fullName", fullName)
             putExtra("email", email)
@@ -145,7 +150,7 @@ class VasateyFCMService : FirebaseMessagingService() {
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
             .setVibrate(longArrayOf(0, 1000, 500, 1000, 500, 1000))
-            .setColor(android.graphics.Color.RED)
+            .setColor(Color.RED)
             .setFullScreenIntent(pendingIntent, true)
             .setSound(null) // Remove soft alarm sound
 
@@ -178,7 +183,7 @@ class VasateyFCMService : FirebaseMessagingService() {
         val alertId = data["alertId"] ?: ""
         val guardianEmail = data["guardianEmail"] ?: ""
         
-        val intent = Intent(this, com.sriox.vasateysec.AlertConfirmationActivity::class.java).apply {
+        val intent = Intent(this, AlertConfirmationActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK
             putExtra("alertId", alertId)
             putExtra("guardianEmail", guardianEmail)
@@ -198,7 +203,7 @@ class VasateyFCMService : FirebaseMessagingService() {
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
-            .setColor(android.graphics.Color.parseColor("#FF9800"))
+            .setColor(Color.parseColor("#FF9800"))
             .build()
         
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -215,7 +220,7 @@ class VasateyFCMService : FirebaseMessagingService() {
             .setContentText(body)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setAutoCancel(true)
-            .setColor(android.graphics.Color.parseColor("#4CAF50"))
+            .setColor(Color.parseColor("#4CAF50"))
             .build()
         
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -241,7 +246,7 @@ class VasateyFCMService : FirebaseMessagingService() {
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setAutoCancel(true)
             .setVibrate(longArrayOf(0, 1000, 500, 1000))
-            .setColor(android.graphics.Color.RED)
+            .setColor(Color.RED)
             .setSound(null) // Remove soft alarm sound
         
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
