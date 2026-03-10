@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/background_dark">
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="80dp"
+        android:background="@drawable/gradient_header_golden">
+
+        <ImageView
+            android:id="@+id/btnBack"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_gravity="start|center_vertical"
+            android:layout_marginStart="16dp"
+            android:src="@drawable/ic_back"
+            android:tint="@color/golden"
+            android:padding="8dp"
+            android:background="?attr/selectableItemBackgroundBorderless" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:text="Find Hardware"
+            android:textColor="@color/text_primary"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+    </FrameLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="16dp"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:id="@+id/tvScanStatus"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Scanning for devices..."
+            android:textColor="@color/text_secondary" />
+
+        <ProgressBar
+            android:id="@+id/pbScanning"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:indeterminateTint="@color/golden" />
+    </LinearLayout>
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rvDevices"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:paddingHorizontal="16dp" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnRescan"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_margin="16dp"
+        android:text="Rescan"
+        app:backgroundTint="@color/golden"
+        android:textColor="@color/background_dark" />
+
+</LinearLayout>
