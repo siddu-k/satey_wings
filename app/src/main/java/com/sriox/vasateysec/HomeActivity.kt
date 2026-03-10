@@ -1,7 +1,10 @@
 package com.sriox.vasateysec
 
 import android.Manifest
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.location.LocationManager
 import android.net.Uri
@@ -13,6 +16,7 @@ import android.view.LayoutInflater
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ArrayAdapter
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.ActionBarDrawerToggle
@@ -21,13 +25,17 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.GravityCompat
 import androidx.lifecycle.lifecycleScope
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.navigation.NavigationView
 import com.sriox.vasateysec.databinding.ActivityHomeBinding
 import com.sriox.vasateysec.models.Helpline
+import com.sriox.vasateysec.models.SmsContact
 import com.sriox.vasateysec.models.UserProfile
+import com.sriox.vasateysec.services.BleGuardianService
 import com.sriox.vasateysec.utils.FCMTokenManager
+import com.sriox.vasateysec.utils.SmsHelper
 import io.github.jan.supabase.gotrue.auth
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.realtime.PostgresAction
@@ -42,6 +50,15 @@ class HomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
     private lateinit var toggle: ActionBarDrawerToggle
     private var allHelplines = listOf<Helpline>()
     private lateinit var helplineAdapter: HelplineAdapter
+    private var smsContacts = listOf<SmsContact>()
+
+    private val watchStatusReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val status = intent?.getStringExtra(BleGuardianService.EXTRA_STATUS)
+            android.util.Log.d("HomeActivity", "Received Watch Status: $status")
+            updateHardwareStatusUi(status)
+        }
+    }
 
     companion object {
         private const val RECORD_AUDIO_PERMISSION_CODE = 123
@@ -67,9 +84,102 @@ class HomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
         
         ensureSessionValid()
         loadUserProfile()
+        loadSmsContactsForSpinner()
         FCMTokenManager.initializeFCM(this)
         restoreVoiceAlertState()
         requestAllPermissions()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        val filter = IntentFilter(BleGuardianService.ACTION_WATCH_STATUS)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(watchStatusReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(watchStatusReceiver, filter)
+        }
+        
+        LocalBroadcastManager.getInstance(this).registerReceiver(watchStatusReceiver, filter)
+        checkInitialHardwareStatus()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        try {
+            LocalBroadcastManager.getInstance(this).unregisterReceiver(watchStatusReceiver)
+            unregisterReceiver(watchStatusReceiver)
+        } catch (e: Exception) {}
+    }
+
+    private fun loadSmsContactsForSpinner() {
+        lifecycleScope.launch {
+            try {
+                // Try database first
+                val currentUser = SupabaseClient.client.auth.currentUserOrNull()
+                if (currentUser != null) {
+                    smsContacts = SupabaseClient.client.from("sms_contacts")
+                        .select { filter { eq("user_id", currentUser.id) } }
+                        .decodeList<SmsContact>()
+                }
+                
+                // Fallback to local
+                if (smsContacts.isEmpty()) {
+                    smsContacts = SmsHelper.getFromLocalStorage(this@HomeActivity)
+                }
+
+                if (smsContacts.isNotEmpty()) {
+                    val contactNames = smsContacts.map { it.name }
+                    val adapter = ArrayAdapter(this@HomeActivity, android.R.layout.simple_spinner_item, contactNames)
+                    adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+                    binding.spinnerCallRecipient.adapter = adapter
+                    
+                    // Restore selection
+                    val savedPhone = getSharedPreferences("alert_settings", MODE_PRIVATE).getString("auto_call_recipient", null)
+                    val index = smsContacts.indexOfFirst { it.phone == savedPhone }
+                    if (index >= 0) binding.spinnerCallRecipient.setSelection(index)
+                }
+            } catch (e: Exception) { }
+        }
+    }
+
+    private fun checkInitialHardwareStatus() {
+        val prefs = getSharedPreferences("vasatey_settings", MODE_PRIVATE)
+        val isHardwareEnabled = prefs.getBoolean("hardware_sos_enabled", false)
+        if (isHardwareEnabled) {
+            binding.hardwareStatusLayout.visibility = View.VISIBLE
+            updateHardwareStatusUi(BleGuardianService.STATUS_DISCONNECTED)
+        } else {
+            binding.hardwareStatusLayout.visibility = View.GONE
+        }
+    }
+
+    private fun updateHardwareStatusUi(status: String?) {
+        binding.hardwareStatusLayout.visibility = View.VISIBLE
+        when (status) {
+            BleGuardianService.STATUS_CONNECTING -> {
+                binding.hardwareStatusDot.backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.YELLOW)
+                binding.hardwareStatusText.text = "Syncing..."
+            }
+            BleGuardianService.STATUS_CONNECTED -> {
+                binding.hardwareStatusDot.backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.GREEN)
+                binding.hardwareStatusText.text = "Watch Online"
+            }
+            BleGuardianService.STATUS_SOS_ACTIVE -> {
+                binding.hardwareStatusDot.backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.RED)
+                binding.hardwareStatusText.text = "SOS ACTIVE"
+            }
+            BleGuardianService.STATUS_GPS_RECEIVED -> {
+                binding.hardwareStatusDot.backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.BLUE)
+                binding.hardwareStatusText.text = "Location Fix"
+                binding.hardwareStatusDot.postDelayed({
+                    updateHardwareStatusUi(BleGuardianService.STATUS_CONNECTED)
+                }, 1000)
+            }
+            else -> {
+                binding.hardwareStatusDot.backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.GRAY)
+                binding.hardwareStatusText.text = "Searching..."
+            }
+        }
     }
     
     private fun setupRealtimeContactListener() {
@@ -127,6 +237,11 @@ class HomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
                 binding.helplineExpandArea.visibility = View.GONE
                 binding.helplineArrow.setImageResource(R.drawable.ic_arrow_down)
             }
+        }
+
+        helplineAdapter = HelplineAdapter(mutableListOf()) { helpline ->
+            val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${helpline.number}"))
+            startActivity(intent)
         }
 
         helplineAdapter = HelplineAdapter(mutableListOf()) { helpline ->
@@ -216,10 +331,13 @@ class HomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
             }
         }
         
-        // Network and SMS toggle persistence
+        // Network and Offline toggle persistence
         val alertPrefs = getSharedPreferences("alert_settings", MODE_PRIVATE)
         binding.switchNetworkAlert.isChecked = alertPrefs.getBoolean("network_alert_enabled", true)
         binding.switchSmsAlert.isChecked = alertPrefs.getBoolean("sms_alert_enabled", false)
+        binding.switchAutoCall.isChecked = alertPrefs.getBoolean("auto_call_enabled", false)
+
+        if (binding.switchAutoCall.isChecked) binding.callRecipientLayout.visibility = View.VISIBLE
 
         binding.switchNetworkAlert.setOnCheckedChangeListener { _, isChecked ->
             alertPrefs.edit().putBoolean("network_alert_enabled", isChecked).apply()
@@ -232,6 +350,24 @@ class HomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
                     ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.SEND_SMS), 101)
                 }
             }
+        }
+
+        binding.switchAutoCall.setOnCheckedChangeListener { _, isChecked ->
+            alertPrefs.edit().putBoolean("auto_call_enabled", isChecked).apply()
+            binding.callRecipientLayout.visibility = if (isChecked) View.VISIBLE else View.GONE
+            if (isChecked) {
+                if (ContextCompat.checkSelfPermission(this, Manifest.permission.CALL_PHONE) != PackageManager.PERMISSION_GRANTED) {
+                    ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CALL_PHONE), 104)
+                }
+            }
+        }
+
+        binding.spinnerCallRecipient.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
+                val selectedPhone = smsContacts[position].phone
+                alertPrefs.edit().putString("auto_call_recipient", selectedPhone).apply()
+            }
+            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
         }
 
         // Link AI assistant button

@@ -28,7 +28,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="SMS Contacts"
+                    android:text="Offline Contacts"
                     android:textColor="@color/text_primary"
                     android:textSize="28sp"
                     android:textStyle="bold" />
@@ -36,7 +36,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Emergency Offline Alerts"
+                    android:text="Emergency SMS &amp; Auto Call"
                     android:textColor="@color/golden"
                     android:textSize="14sp"
                     android:layout_marginTop="4dp" />
@@ -111,12 +111,21 @@
                             android:textColor="@color/text_primary" />
                     </com.google.android.material.textfield.TextInputLayout>
 
+                    <com.google.android.material.checkbox.MaterialCheckBox
+                        android:id="@+id/cbIsCallContact"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="Enable Auto Call for this contact"
+                        android:textColor="@color/text_secondary"
+                        app:buttonTint="@color/golden" />
+
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/btnAddSmsContact"
                         android:layout_width="match_parent"
                         android:layout_height="56dp"
-                        android:layout_marginTop="20dp"
-                        android:text="Add SMS Contact"
+                        android:layout_marginTop="12dp"
+                        android:text="Save Contact"
                         android:textColor="@color/background_dark"
                         app:backgroundTint="@color/golden"
                         app:cornerRadius="16dp" />
@@ -126,7 +135,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Your SMS Contacts"
+                android:text="Your Offline Alert Contacts"
                 android:textColor="@color/text_primary"
                 android:textSize="18sp"
                 android:textStyle="bold"

@@ -15,8 +15,9 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
-    <!-- SMS Permission -->
+    <!-- SMS and CALL Permission -->
     <uses-permission android:name="android.permission.SEND_SMS" />
+    <uses-permission android:name="android.permission.CALL_PHONE" />
 
     <!-- Bluetooth Permissions -->
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
@@ -80,6 +81,7 @@
         <activity android:name=".ContactDetailActivity" android:exported="false" android:theme="@style/Theme.Vasateysec" />
         <activity android:name=".PlaceReviewsActivity" android:exported="false" android:theme="@style/Theme.Vasateysec" />
         <activity android:name=".AiChatActivity" android:exported="false" android:theme="@style/Theme.Vasateysec" />
+        <activity android:name=".BleDeviceScanActivity" android:exported="false" android:theme="@style/Theme.Vasateysec" />
 
         <service android:name=".VoskWakeWordService" android:foregroundServiceType="microphone" android:exported="false" />
         <service android:name=".services.VasateyFCMService" android:exported="false">
@@ -90,6 +92,12 @@
 
         <!-- BLE Hardware Service -->
         <service android:name=".services.BleGuardianService" android:foregroundServiceType="connectedDevice" android:exported="false" />
+
+        <receiver android:name=".utils.SmsSentReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="com.sriox.vasateysec.SMS_SENT" />
+            </intent-filter>
+        </receiver>
 
         <meta-data android:name="com.google.android.geo.API_KEY" android:value="AIzaSyA5xCboxSUCu_jKtd0dW4Ms4atbsiiQtq4" />
     </application>

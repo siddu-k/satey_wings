@@ -5,10 +5,13 @@ import android.util.Log
 import com.sriox.vasateysec.SupabaseClient
 import com.sriox.vasateysec.models.AlertConfirmation
 import com.sriox.vasateysec.models.AlertHistory
+import com.sriox.vasateysec.models.UserProfile
 import io.github.jan.supabase.gotrue.auth
 import io.github.jan.supabase.postgrest.from
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.text.SimpleDateFormat
@@ -32,13 +35,11 @@ object AlertConfirmationManager {
             // Call Supabase Edge Function via HTTP
             val client = okhttp3.OkHttpClient()
             
-            val jsonBody = """
-                {
-                    "alertId": "$alertId",
-                    "guardianEmail": "$guardianEmail",
-                    "guardianUserId": "$guardianUserId"
-                }
-            """.trimIndent()
+            val jsonBody = buildJsonObject {
+                put("alertId", alertId)
+                put("guardianEmail", guardianEmail)
+                put("guardianUserId", guardianUserId)
+            }.toString()
             
             val mediaType = "application/json; charset=utf-8".toMediaType()
             val requestBody = jsonBody.toRequestBody(mediaType)
@@ -84,15 +85,20 @@ object AlertConfirmationManager {
                 ?: return@withContext Result.failure(Exception("User not logged in"))
 
             // Verify password
-            val userProfile = SupabaseClient.client.from("users")
-                .select {
-                    filter {
-                        eq("id", currentUser.id)
+            val userProfile = try {
+                SupabaseClient.client.from("users")
+                    .select {
+                        filter {
+                            eq("id", currentUser.id)
+                        }
                     }
-                }
-                .decodeSingle<Map<String, String>>()
+                    .decodeSingle<UserProfile>()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error fetching user profile: ${e.message}")
+                return@withContext Result.failure(Exception("Failed to verify user profile"))
+            }
 
-            val savedPassword = userProfile["cancel_password"] ?: ""
+            val savedPassword = userProfile.cancel_password ?: ""
             
             if (savedPassword.isEmpty()) {
                 return@withContext Result.failure(Exception("No cancel password set. Please set one in your profile."))
@@ -242,13 +248,11 @@ object AlertConfirmationManager {
             // Call Supabase Edge Function via HTTP
             val client = okhttp3.OkHttpClient()
             
-            val jsonBody = """
-                {
-                    "alertId": "$alertId",
-                    "guardianEmail": "$guardianEmail",
-                    "expired": true
-                }
-            """.trimIndent()
+            val jsonBody = buildJsonObject {
+                put("alertId", alertId)
+                put("guardianEmail", guardianEmail)
+                put("expired", true)
+            }.toString()
             
             val mediaType = "application/json; charset=utf-8".toMediaType()
             val requestBody = jsonBody.toRequestBody(mediaType)
@@ -281,12 +285,10 @@ object AlertConfirmationManager {
             // Call Supabase Edge Function via HTTP
             val client = okhttp3.OkHttpClient()
             
-            val jsonBody = """
-                {
-                    "alertId": "$alertId",
-                    "guardianEmail": "$guardianEmail"
-                }
-            """.trimIndent()
+            val jsonBody = buildJsonObject {
+                put("alertId", alertId)
+                put("guardianEmail", guardianEmail)
+            }.toString()
             
             val mediaType = "application/json; charset=utf-8".toMediaType()
             val requestBody = jsonBody.toRequestBody(mediaType)

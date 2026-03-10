@@ -25,6 +25,8 @@ import com.sriox.vasateysec.databinding.LayoutPlaceReviewBottomSheetBinding
 import com.sriox.vasateysec.databinding.LayoutPlaceReviewDetailBottomSheetBinding
 import com.sriox.vasateysec.models.PlaceReview
 import com.sriox.vasateysec.models.User
+import com.sriox.vasateysec.models.UserProfile
+import com.sriox.vasateysec.utils.LocationManager
 import io.github.jan.supabase.gotrue.auth
 import io.github.jan.supabase.postgrest.from
 import kotlinx.coroutines.launch
@@ -39,6 +41,7 @@ class PlaceReviewsActivity : AppCompatActivity(), OnMapReadyCallback {
     private val markerReviewMap = mutableMapOf<String, PlaceReview>()
 
     companion object {
+        private const val TAG = "PlaceReviews"
         private const val LOCATION_PERMISSION_REQUEST_CODE = 1001
     }
 
@@ -88,8 +91,41 @@ class PlaceReviewsActivity : AppCompatActivity(), OnMapReadyCallback {
             }
         }
 
+        googleMap.setOnMyLocationButtonClickListener {
+            zoomToMyLocation()
+            true
+        }
+
         enableMyLocation()
         loadAllReviews()
+    }
+
+    private fun zoomToMyLocation() {
+        lifecycleScope.launch {
+            val loc = LocationManager.getCurrentLocation(this@PlaceReviewsActivity)
+            if (loc != null) {
+                googleMap.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(loc.latitude, loc.longitude), 15f))
+                return@launch
+            }
+
+            try {
+                val currentUser = SupabaseClient.client.auth.currentUserOrNull()
+                if (currentUser != null) {
+                    val profile = SupabaseClient.client.from("users")
+                        .select { filter { eq("id", currentUser.id) } }
+                        .decodeSingle<UserProfile>()
+                    
+                    if (profile.last_latitude != null && profile.last_longitude != null) {
+                        googleMap.animateCamera(CameraUpdateFactory.newLatLngZoom(
+                            LatLng(profile.last_latitude, profile.last_longitude), 15f
+                        ))
+                        return@launch
+                    }
+                }
+            } catch (e: Exception) { }
+
+            Toast.makeText(this@PlaceReviewsActivity, "Location unavailable", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun showReviewDetail(review: PlaceReview) {
@@ -104,7 +140,6 @@ class PlaceReviewsActivity : AppCompatActivity(), OnMapReadyCallback {
         val dateString = review.created_at?.let { formatTimestamp(it) } ?: "Recently"
         sheetBinding.tvDetailDate.text = "Posted: $dateString"
 
-        // Handle Delete Button
         val currentUser = SupabaseClient.client.auth.currentUserOrNull()
         if (currentUser != null && review.user_id == currentUser.id) {
             sheetBinding.btnDeleteReview.visibility = View.VISIBLE
@@ -132,9 +167,9 @@ class PlaceReviewsActivity : AppCompatActivity(), OnMapReadyCallback {
                 }
                 Toast.makeText(this@PlaceReviewsActivity, "Review deleted", Toast.LENGTH_SHORT).show()
                 dialog.dismiss()
-                loadAllReviews() // Refresh markers
+                loadAllReviews() 
             } catch (e: Exception) {
-                Toast.makeText(this@PlaceReviewsActivity, "Delete failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@PlaceReviewsActivity, "Delete failed", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -155,31 +190,13 @@ class PlaceReviewsActivity : AppCompatActivity(), OnMapReadyCallback {
             == PackageManager.PERMISSION_GRANTED
         ) {
             googleMap.isMyLocationEnabled = true
-            
-            val fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
-            fusedLocationClient.lastLocation.addOnSuccessListener { location ->
-                if (location != null) {
-                    val currentLatLng = LatLng(location.latitude, location.longitude)
-                    googleMap.animateCamera(CameraUpdateFactory.newLatLngZoom(currentLatLng, 15f))
-                }
-            }
+            zoomToMyLocation()
         } else {
             ActivityCompat.requestPermissions(
                 this,
                 arrayOf(Manifest.permission.ACCESS_FINE_LOCATION),
                 LOCATION_PERMISSION_REQUEST_CODE
             )
-        }
-    }
-
-    private fun bitmapDescriptorFromVector(context: Context, vectorResId: Int, scaleFactor: Float = 1.5f): BitmapDescriptor? {
-        return ContextCompat.getDrawable(context, vectorResId)?.run {
-            val width = (intrinsicWidth * scaleFactor).toInt()
-            val height = (intrinsicHeight * scaleFactor).toInt()
-            setBounds(0, 0, width, height)
-            val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-            draw(Canvas(bitmap))
-            BitmapDescriptorFactory.fromBitmap(bitmap)
         }
     }
 

@@ -96,7 +96,7 @@ data class SafePlace(
 
 @Serializable
 data class Helpline(
-    val id: Int? = null,
+    val id: Long? = null, // Updated to Long for Supabase int8
     val name: String,
     val number: String,
     val category: String? = null

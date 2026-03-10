@@ -4,12 +4,12 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
 import android.os.SystemClock
 import android.util.Log
-import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import com.sriox.vasateysec.utils.AlertManager
 import com.sriox.vasateysec.utils.CameraManager
@@ -29,12 +29,10 @@ class VoskWakeWordService : Service(), RecognitionListener {
 
     private var speechService: SpeechService? = null
     private var lastRecognitionTime: Long = 0
-    private val cooldownPeriod = 5000 // 5 seconds
-    
-    // Logic for double-word activation
+    private val cooldownPeriod = 5000 
     private var isWaitingForSecondWord = false
     private var firstWordDetectedTime: Long = 0
-    private val doubleWordWindow = 5000 // Must say it again within 5 seconds
+    private val doubleWordWindow = 5000 
 
     override fun onCreate() {
         super.onCreate()
@@ -45,7 +43,6 @@ class VoskWakeWordService : Service(), RecognitionListener {
         Thread {
             val prefs = getSharedPreferences("vasatey_prefs", MODE_PRIVATE)
             val wakeWord = prefs.getString("wake_word", "help me") ?: "help me"
-            
             StorageService.unpack(this, "model", "model",
                 { model: Model? ->
                     try {
@@ -73,7 +70,6 @@ class VoskWakeWordService : Service(), RecognitionListener {
             val channel = NotificationChannel(channelId, "Wake Word Service", NotificationManager.IMPORTANCE_LOW)
             (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).createNotificationChannel(channel)
         }
-
         return NotificationCompat.Builder(this, channelId)
             .setContentTitle("Wake Word Detection")
             .setContentText(contentText)
@@ -88,10 +84,8 @@ class VoskWakeWordService : Service(), RecognitionListener {
             val resultText = getResultTextFromJson(it)
             if (resultText.isNotBlank()) {
                 val currentTime = SystemClock.elapsedRealtime()
-                
-                // Get settings
                 val settings = getSharedPreferences("vasatey_settings", MODE_PRIVATE)
-                val isDoubleWordEnabled = settings.getBoolean("double_word_enabled", false)
+                val isDoubleWordEnabled = settings.getBoolean("double_word_enabled", true)
                 val wakeWord = getSharedPreferences("vasatey_prefs", MODE_PRIVATE).getString("wake_word", "help me") ?: "help me"
 
                 if (resultText.contains(wakeWord, ignoreCase = true)) {
@@ -100,7 +94,7 @@ class VoskWakeWordService : Service(), RecognitionListener {
                     } else {
                         if (currentTime - lastRecognitionTime > cooldownPeriod) {
                             lastRecognitionTime = currentTime
-                            triggerAlertSequence(wakeWord)
+                            triggerAlertSequence()
                         }
                     }
                 }
@@ -110,71 +104,34 @@ class VoskWakeWordService : Service(), RecognitionListener {
 
     private fun handleDoubleWordDetection(currentTime: Long, wakeWord: String) {
         if (!isWaitingForSecondWord) {
-            // First time detecting the word
             isWaitingForSecondWord = true
             firstWordDetectedTime = currentTime
-            Log.d("VoskService", "First wake word detected. Waiting for second...")
-            
-            // Give subtle feedback
-            val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-            val notification = NotificationCompat.Builder(this, "VOSK_SERVICE_CHANNEL")
-                .setContentTitle("Confirmation Required")
-                .setContentText("Say '$wakeWord' again to confirm alert.")
-                .setSmallIcon(R.mipmap.ic_launcher)
-                .setVibrate(longArrayOf(0, 100))
-                .build()
-            notificationManager.notify(4, notification)
-            
+            Log.d("VoskService", "First detection. Waiting for second...")
         } else {
-            // Second detection
             if (currentTime - firstWordDetectedTime <= doubleWordWindow) {
-                // Successfully said twice within 5 seconds
                 isWaitingForSecondWord = false
-                Log.d("VoskService", "Double wake word confirmed!")
-                triggerAlertSequence(wakeWord)
+                triggerAlertSequence()
             } else {
-                // Too much time passed, treat this as a new "first" detection
                 firstWordDetectedTime = currentTime
-                Log.d("VoskService", "Second word too late. Restarting window.")
             }
         }
     }
 
-    private fun triggerAlertSequence(wakeWord: String) {
-        showWakeWordDetectedNotification()
+    private fun triggerAlertSequence() {
         triggerEmergencyAlert()
-    }
-    
-    private fun showWakeWordDetectedNotification() {
-        val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-        val channelId = "WAKE_WORD_DETECTED_CHANNEL"
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(channelId, "Wake Word Detections", NotificationManager.IMPORTANCE_HIGH)
-            notificationManager.createNotificationChannel(channel)
-        }
-
-        val notification = NotificationCompat.Builder(this, channelId)
-            .setContentTitle("🆘 Alert Triggered!")
-            .setContentText("Emergency sequence started. Notifying contacts...")
-            .setSmallIcon(R.mipmap.ic_launcher)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setCategory(NotificationCompat.CATEGORY_ALARM)
-            .setAutoCancel(true)
-            .setVibrate(longArrayOf(0, 200, 100, 200, 100, 200))
-            .build()
-
-        notificationManager.notify(2, notification)
     }
     
     private fun triggerEmergencyAlert() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val alertPrefs = getSharedPreferences("alert_settings", MODE_PRIVATE)
+                val alertPrefs = getSharedPreferences("alert_settings", Context.MODE_PRIVATE)
                 val networkEnabled = alertPrefs.getBoolean("network_alert_enabled", true)
                 val smsEnabled = alertPrefs.getBoolean("sms_alert_enabled", false)
+                val autoCallEnabled = alertPrefs.getBoolean("auto_call_enabled", false)
                 
-                var location: android.location.Location? = LocationManager.getCurrentLocation(this@VoskWakeWordService)
+                val location = LocationManager.getCurrentLocation(this@VoskWakeWordService)
 
+                // 1. Cloud Alert (Network)
                 if (networkEnabled) {
                     val photos = CameraManager.captureEmergencyPhotos(this@VoskWakeWordService)
                     AlertManager.sendEmergencyAlert(
@@ -187,12 +144,15 @@ class VoskWakeWordService : Service(), RecognitionListener {
                     )
                 }
 
-                if (smsEnabled) {
+                // 2. Offline Alerts (SMS or Call)
+                // FIX: Check for EITHER SMS or Auto-Call enabled
+                if (smsEnabled || autoCallEnabled) {
+                    Log.d("VoskService", "Triggering Offline Alerts (SMS: $smsEnabled, Call: $autoCallEnabled)")
                     SmsHelper.sendEmergencySms(this@VoskWakeWordService, location?.latitude, location?.longitude)
                 }
 
             } catch (e: Exception) {
-                Log.e("VoskService", "Error in trigger sequence: ${e.message}")
+                Log.e("VoskService", "Trigger error: ${e.message}")
             }
         }
     }

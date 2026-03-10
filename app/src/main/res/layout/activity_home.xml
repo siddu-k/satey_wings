@@ -48,6 +48,38 @@
                         android:layout_marginTop="8dp" />
                 </LinearLayout>
 
+                <!-- Hardware SOS Status Light -->
+                <LinearLayout
+                    android:id="@+id/hardwareStatusLayout"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="top|start"
+                    android:layout_margin="20dp"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:background="@drawable/bg_rounded_card"
+                    android:paddingHorizontal="12dp"
+                    android:paddingVertical="6dp"
+                    android:visibility="gone"
+                    tools:visibility="visible">
+
+                    <View
+                        android:id="@+id/hardwareStatusDot"
+                        android:layout_width="10dp"
+                        android:layout_height="10dp"
+                        android:background="@drawable/bg_circle_status"
+                        android:backgroundTint="#FF0000" />
+
+                    <TextView
+                        android:id="@+id/hardwareStatusText"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Watch Offline"
+                        android:textColor="@color/text_primary"
+                        android:textSize="12sp"
+                        android:layout_marginStart="8dp" />
+                </LinearLayout>
+
                 <!-- Logout Button -->
                 <ImageView
                     android:id="@+id/logoutButton"
@@ -129,39 +161,113 @@
                             android:background="#20FFFFFF"
                             android:layout_marginVertical="12dp" />
 
-                        <!-- SMS Alert Toggle -->
+                        <!-- Offline Alerts Section -->
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:orientation="horizontal"
-                            android:gravity="center_vertical">
+                            android:orientation="vertical">
 
-                            <ImageView
-                                android:layout_width="32dp"
-                                android:layout_height="32dp"
-                                android:src="@android:drawable/sym_action_chat"
-                                android:tint="@color/golden" />
-
-                            <LinearLayout
-                                android:layout_width="0dp"
+                            <TextView
+                                android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:layout_marginStart="16dp"
-                                android:orientation="vertical">
+                                android:text="Offline Alerts"
+                                android:textColor="@color/text_primary"
+                                android:textSize="16sp"
+                                android:textStyle="bold"
+                                android:layout_marginBottom="12dp" />
+
+                            <!-- SMS Toggle -->
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="horizontal"
+                                android:gravity="center_vertical"
+                                android:layout_marginBottom="8dp">
+
+                                <ImageView
+                                    android:layout_width="24dp"
+                                    android:layout_height="24dp"
+                                    android:src="@android:drawable/sym_action_chat"
+                                    android:tint="@color/golden" />
+
+                                <TextView
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:layout_marginStart="12dp"
+                                    android:text="SMS Alert"
+                                    android:textColor="@color/text_secondary"
+                                    android:textSize="14sp" />
+
+                                <com.google.android.material.switchmaterial.SwitchMaterial
+                                    android:id="@+id/switchSmsAlert"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content" />
+                            </LinearLayout>
+
+                            <!-- Auto Call Toggle -->
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="horizontal"
+                                android:gravity="center_vertical"
+                                android:layout_marginBottom="8dp">
+
+                                <ImageView
+                                    android:layout_width="24dp"
+                                    android:layout_height="24dp"
+                                    android:src="@android:drawable/ic_menu_call"
+                                    android:tint="@color/golden" />
+
+                                <TextView
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:layout_marginStart="12dp"
+                                    android:text="Auto Call"
+                                    android:textColor="@color/text_secondary"
+                                    android:textSize="14sp" />
+
+                                <com.google.android.material.switchmaterial.SwitchMaterial
+                                    android:id="@+id/switchAutoCall"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content" />
+                            </LinearLayout>
+
+                            <!-- Call Recipient Selection -->
+                            <LinearLayout
+                                android:id="@+id/callRecipientLayout"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="vertical"
+                                android:visibility="gone"
+                                android:layout_marginTop="4dp">
 
                                 <TextView
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:text="SMS Alert (Offline)"
-                                    android:textColor="@color/text_primary"
-                                    android:textSize="16sp"
-                                    android:textStyle="bold" />
-                            </LinearLayout>
+                                    android:text="Call Recipient:"
+                                    android:textColor="@color/golden"
+                                    android:textSize="12sp"
+                                    android:layout_marginStart="36dp" />
 
-                            <com.google.android.material.switchmaterial.SwitchMaterial
-                                android:id="@+id/switchSmsAlert"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content" />
+                                <com.google.android.material.card.MaterialCardView
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginStart="36dp"
+                                    android:layout_marginTop="4dp"
+                                    app:cardBackgroundColor="#1A1A1A"
+                                    app:cardCornerRadius="8dp"
+                                    app:cardElevation="0dp">
+
+                                    <Spinner
+                                        android:id="@+id/spinnerCallRecipient"
+                                        android:layout_width="match_parent"
+                                        android:layout_height="40dp"
+                                        android:paddingHorizontal="8dp"
+                                        android:theme="@style/ThemeOverlay.AppCompat.Dark" />
+                                </com.google.android.material.card.MaterialCardView>
+                            </LinearLayout>
                         </LinearLayout>
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
@@ -314,9 +420,8 @@
                             android:layout_width="48dp"
                             android:layout_height="48dp"
                             android:src="@drawable/ic_safe_place"
-                            android:tint="@color/golden"
-                            android:padding="12dp"
-                            android:background="@drawable/bg_rounded_card" />
+                            android:tint="@color/golden"                                 android:padding="12dp"
+                                android:background="@drawable/bg_rounded_card" />
 
                         <LinearLayout
                             android:layout_width="0dp"
@@ -381,8 +486,7 @@
                                 android:layout_width="48dp"
                                 android:layout_height="48dp"
                                 android:src="@android:drawable/ic_menu_call"
-                                android:tint="@color/golden"
-                                android:padding="12dp"
+                                android:tint="@color/golden"                                 android:padding="12dp"
                                 android:background="@drawable/bg_rounded_card" />
 
                             <LinearLayout

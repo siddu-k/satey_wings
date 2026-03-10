@@ -1,6 +1,8 @@
 package com.sriox.vasateysec
 
 import android.Manifest
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
@@ -20,11 +22,19 @@ class SettingsActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivitySettingsBinding
     private lateinit var prefs: android.content.SharedPreferences
+    private var bluetoothAdapter: BluetoothAdapter? = null
+
+    companion object {
+        private const val REQUEST_ENABLE_BT = 103
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivitySettingsBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        val bluetoothManager = getSystemService(BLUETOOTH_SERVICE) as BluetoothManager
+        bluetoothAdapter = bluetoothManager.adapter
 
         prefs = getSharedPreferences("vasatey_settings", MODE_PRIVATE)
 
@@ -33,6 +43,7 @@ class SettingsActivity : AppCompatActivity() {
         setupSwitches()
         setupWakeWordCard()
         setupOpenRouterHandling()
+        setupHardwareScan()
         setupBottomNavigation()
     }
 
@@ -43,7 +54,7 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun loadSettings() {
-        // Core features
+        // Core features from local prefs
         binding.switchPhotoCapture.isChecked = prefs.getBoolean("photo_capture_enabled", true)
         binding.switchLocationTracking.isChecked = prefs.getBoolean("location_tracking_enabled", true)
         binding.switchVoiceAlert.isChecked = prefs.getBoolean("voice_alert_enabled", false)
@@ -51,15 +62,15 @@ class SettingsActivity : AppCompatActivity() {
         binding.switchVibration.isChecked = prefs.getBoolean("vibration_enabled", true)
         binding.switchSound.isChecked = prefs.getBoolean("sound_enabled", true)
         binding.switchHardwareSos.isChecked = prefs.getBoolean("hardware_sos_enabled", false)
+        binding.switchHardwareGps.isChecked = prefs.getBoolean("use_hardware_gps", false)
         
-        // Double word trigger - default to TRUE as requested
         binding.switchDoubleWord.isChecked = prefs.getBoolean("double_word_enabled", true)
-        
-        // OpenRouter settings
+
+        // Set defaults from local storage first
         binding.etOpenRouterApiKey.setText(prefs.getString("gemini_api_key", ""))
         binding.etOpenRouterModelName.setText(prefs.getString("gemini_model_name", "arcee-ai/trinity-large-preview:free"))
 
-        // Wake word from cloud
+        // --- FETCH SYNCED DATA FROM CLOUD ---
         lifecycleScope.launch {
             try {
                 val currentUser = SupabaseClient.client.auth.currentUserOrNull()
@@ -68,9 +79,20 @@ class SettingsActivity : AppCompatActivity() {
                         .select { filter { eq("id", currentUser.id) } }
                         .decodeSingle<com.sriox.vasateysec.models.UserProfile>()
                     
+                    // Update Wake Word Display
                     binding.currentWakeWord.text = "Current: ${userProfile.wake_word ?: "help me"}"
+                    
+                    // Sync API Key and Model from Cloud to Local and UI
+                    if (!userProfile.gemini_api_key.isNullOrBlank()) {
+                        binding.etOpenRouterApiKey.setText(userProfile.gemini_api_key)
+                        prefs.edit().putString("gemini_api_key", userProfile.gemini_api_key).apply()
+                    }
+                    
+                    // Optional: If you also save model name to DB, sync it here too
                 }
-            } catch (e: Exception) { }
+            } catch (e: Exception) {
+                android.util.Log.e("Settings", "Failed to sync cloud settings: ${e.message}")
+            }
         }
     }
 
@@ -98,10 +120,14 @@ class SettingsActivity : AppCompatActivity() {
         }
         binding.switchHardwareSos.setOnCheckedChangeListener { _: CompoundButton, isChecked: Boolean ->
             if (isChecked) {
-                checkBluetoothPermissions()
+                checkBluetoothPermissionsAndState()
             } else {
                 stopHardwareService()
             }
+        }
+        binding.switchHardwareGps.setOnCheckedChangeListener { _: CompoundButton, isChecked: Boolean ->
+            prefs.edit().putBoolean("use_hardware_gps", isChecked).apply()
+            showToast(if (isChecked) "Hardware GPS prioritized" else "Mobile GPS prioritized")
         }
         binding.switchDoubleWord.setOnCheckedChangeListener { _: CompoundButton, isChecked: Boolean ->
             prefs.edit().putBoolean("double_word_enabled", isChecked).apply()
@@ -109,7 +135,13 @@ class SettingsActivity : AppCompatActivity() {
         }
     }
 
-    private fun checkBluetoothPermissions() {
+    private fun setupHardwareScan() {
+        binding.btnScanHardware.setOnClickListener {
+            startActivity(Intent(this, BleDeviceScanActivity::class.java))
+        }
+    }
+
+    private fun checkBluetoothPermissionsAndState() {
         val permissions = mutableListOf<String>()
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
@@ -124,7 +156,25 @@ class SettingsActivity : AppCompatActivity() {
             ActivityCompat.requestPermissions(this, permissions.toTypedArray(), 102)
             binding.switchHardwareSos.isChecked = false
         } else {
-            startHardwareService()
+            if (bluetoothAdapter?.isEnabled == false) {
+                val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
+                startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT)
+                binding.switchHardwareSos.isChecked = false
+            } else {
+                startHardwareService()
+            }
+        }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_ENABLE_BT) {
+            if (resultCode == RESULT_OK) {
+                binding.switchHardwareSos.isChecked = true
+                startHardwareService()
+            } else {
+                showToast("Bluetooth is required for Hardware SOS")
+            }
         }
     }
 
@@ -136,7 +186,7 @@ class SettingsActivity : AppCompatActivity() {
         } else {
             startService(serviceIntent)
         }
-        showToast("Hardware monitoring started")
+        showToast("Hardware monitoring active")
     }
 
     private fun stopHardwareService() {

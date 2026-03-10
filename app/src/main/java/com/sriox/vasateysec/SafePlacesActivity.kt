@@ -1,6 +1,9 @@
 package com.sriox.vasateysec
 
+import android.Manifest
 import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.os.Bundle
@@ -11,6 +14,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.google.android.gms.maps.CameraUpdateFactory
@@ -22,6 +26,8 @@ import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.sriox.vasateysec.databinding.ActivitySafePlacesBinding
 import com.sriox.vasateysec.databinding.LayoutSafePlaceBottomSheetBinding
 import com.sriox.vasateysec.models.SafePlace
+import com.sriox.vasateysec.models.UserProfile
+import com.sriox.vasateysec.utils.LocationManager
 import io.github.jan.supabase.gotrue.auth
 import io.github.jan.supabase.postgrest.from
 import kotlinx.coroutines.launch
@@ -33,6 +39,10 @@ class SafePlacesActivity : AppCompatActivity(), OnMapReadyCallback {
     private var currentLocation: LatLng? = null
     private var selectedLatLng: LatLng? = null
     private val markerPlaceMap = mutableMapOf<String, SafePlace>()
+
+    companion object {
+        private const val TAG = "SafePlacesActivity"
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -95,8 +105,41 @@ class SafePlacesActivity : AppCompatActivity(), OnMapReadyCallback {
             showAddPlaceForm(latLng)
         }
 
+        googleMap.setOnMyLocationButtonClickListener {
+            zoomToMyLocation()
+            true
+        }
+
         enableMyLocation()
         loadSafePlaces()
+    }
+
+    private fun zoomToMyLocation() {
+        lifecycleScope.launch {
+            val loc = LocationManager.getCurrentLocation(this@SafePlacesActivity)
+            if (loc != null) {
+                googleMap.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(loc.latitude, loc.longitude), 15f))
+                return@launch
+            }
+
+            try {
+                val currentUser = SupabaseClient.client.auth.currentUserOrNull()
+                if (currentUser != null) {
+                    val profile = SupabaseClient.client.from("users")
+                        .select { filter { eq("id", currentUser.id) } }
+                        .decodeSingle<UserProfile>()
+                    
+                    if (profile.last_latitude != null && profile.last_longitude != null) {
+                        googleMap.animateCamera(CameraUpdateFactory.newLatLngZoom(
+                            LatLng(profile.last_latitude, profile.last_longitude), 15f
+                        ))
+                        return@launch
+                    }
+                }
+            } catch (e: Exception) { }
+
+            Toast.makeText(this@SafePlacesActivity, "Location unavailable", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun showAddPlaceForm(latLng: LatLng) {
@@ -116,7 +159,6 @@ class SafePlacesActivity : AppCompatActivity(), OnMapReadyCallback {
         sheetBinding.tvSheetPlaceName.text = place.name
         sheetBinding.tvSheetDescription.text = place.description ?: "No description available"
 
-        // Check ownership for delete button
         val currentUser = SupabaseClient.client.auth.currentUserOrNull()
         if (currentUser != null && place.created_by == currentUser.id) {
             sheetBinding.btnDeleteSafePlace.visibility = View.VISIBLE
@@ -158,15 +200,11 @@ class SafePlacesActivity : AppCompatActivity(), OnMapReadyCallback {
     }
 
     private fun enableMyLocation() {
-        if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
             googleMap.isMyLocationEnabled = true
-            val fusedLocationClient = com.google.android.gms.location.LocationServices.getFusedLocationProviderClient(this)
-            fusedLocationClient.lastLocation.addOnSuccessListener { location ->
-                if (location != null) {
-                    currentLocation = LatLng(location.latitude, location.longitude)
-                    googleMap.animateCamera(CameraUpdateFactory.newLatLngZoom(currentLocation!!, 15f))
-                }
-            }
+            zoomToMyLocation()
+        } else {
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), 1001)
         }
     }
 
