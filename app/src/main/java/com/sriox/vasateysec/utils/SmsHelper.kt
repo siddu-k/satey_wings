@@ -1,6 +1,7 @@
 package com.sriox.vasateysec.utils
 
 import android.Manifest
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -22,6 +23,7 @@ object SmsHelper {
     private const val TAG = "SmsHelper"
     private const val PREFS_NAME = "trusted_contacts_storage"
     private const val STORAGE_KEY = "permanent_sms_contacts"
+    private const val ACTION_SMS_SENT = "com.sriox.vasateysec.SMS_SENT"
     
     private var lastSmsSentTime = 0L
 
@@ -30,18 +32,18 @@ object SmsHelper {
         val smsEnabled = alertPrefs.getBoolean("sms_alert_enabled", false) || forceSms
         val autoCallEnabled = alertPrefs.getBoolean("auto_call_enabled", false)
 
-        // Get Custom Cooldown from settings
+        Log.d(TAG, "🔍 Initial Check - smsEnabled: $smsEnabled, forceSms: $forceSms")
+
         val settingsPrefs = context.getSharedPreferences("vasatey_settings", Context.MODE_PRIVATE)
         val cooldownMinutes = settingsPrefs.getInt("hardware_sms_interval", 2)
         val smsCooldownMs = cooldownMinutes * 60 * 1000L
         
         val currentTime = SystemClock.elapsedRealtime()
-        if (currentTime - lastSmsSentTime < smsCooldownMs) {
-            Log.d(TAG, "🚫 Spam Blocked: Cooldown of $cooldownMinutes min is active.")
+        
+        if (forceSms && (currentTime - lastSmsSentTime < smsCooldownMs)) {
+            Log.d(TAG, "🚫 Spam Blocked: Cooldown of $cooldownMinutes min is active for hardware.")
             return
         }
-
-        Log.d(TAG, "🔔 Alert Sequence Started (Force: $forceSms)")
 
         withContext(Dispatchers.IO) {
             try {
@@ -55,11 +57,15 @@ object SmsHelper {
                         if (contacts.isNotEmpty()) saveToLocalStorage(context, contacts)
                     }
                 } catch (e: Exception) {
-                    Log.w(TAG, "🌐 Using Local Storage")
+                    Log.w(TAG, "🌐 Supabase Fetch Failed: ${e.message}")
                 }
 
                 if (contacts.isEmpty()) contacts = getFromLocalStorage(context)
-                if (contacts.isEmpty()) return@withContext
+                
+                if (contacts.isEmpty()) {
+                    Log.e(TAG, "❌ No contacts found.")
+                    return@withContext
+                }
 
                 if (smsEnabled) {
                     if (ContextCompat.checkSelfPermission(context, Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED) {
@@ -74,11 +80,42 @@ object SmsHelper {
                             SmsManager.getDefault()
                         }
 
+                        if (smsManager == null) {
+                            Log.e(TAG, "❌ SmsManager is NULL")
+                            return@withContext
+                        }
+
                         for (contact in contacts) {
-                            smsManager.sendTextMessage(contact.phone, null, message, null, null)
+                            Log.d(TAG, "📤 Sending to: ${contact.phone}")
+                            
+                            val sentIntent = Intent(ACTION_SMS_SENT).apply {
+                                putExtra("phone", contact.phone)
+                                setPackage(context.packageName)
+                            }
+                            
+                            val pendingIntent = PendingIntent.getBroadcast(
+                                context, 
+                                contact.phone.hashCode(), 
+                                sentIntent, 
+                                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                            )
+
+                            // Important: If message is long, it might need divideMessage
+                            val parts = smsManager.divideMessage(message)
+                            if (parts.size > 1) {
+                                Log.d(TAG, "Message too long, sending as multipart (${parts.size} parts)")
+                                val sentIntents = ArrayList<PendingIntent>()
+                                for (i in parts.indices) sentIntents.add(pendingIntent)
+                                smsManager.sendMultipartTextMessage(contact.phone, null, parts, sentIntents, null)
+                            } else {
+                                smsManager.sendTextMessage(contact.phone, null, message, pendingIntent, null)
+                            }
                         }
                         
                         lastSmsSentTime = SystemClock.elapsedRealtime()
+                        Log.d(TAG, "✅ SMS triggered for ${contacts.size} contacts")
+                    } else {
+                        Log.e(TAG, "❌ Permission SEND_SMS Missing")
                     }
                 }
 
@@ -91,7 +128,7 @@ object SmsHelper {
                 }
                 
             } catch (e: Exception) {
-                Log.e(TAG, "SOS Alert Error: ${e.message}")
+                Log.e(TAG, "🆘 Error: ${e.message}", e)
             }
         }
     }
@@ -114,6 +151,10 @@ object SmsHelper {
     fun getFromLocalStorage(context: Context): List<SmsContact> {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val json = prefs.getString(STORAGE_KEY, null)
-        return if (json != null) Json.decodeFromString(json) else emptyList()
+        return if (json != null) {
+            try {
+                Json.decodeFromString<List<SmsContact>>(json)
+            } catch (e: Exception) { emptyList() }
+        } else emptyList()
     }
 }

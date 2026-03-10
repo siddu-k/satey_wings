@@ -1,10 +1,14 @@
 package com.sriox.vasateysec.services
 
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.media.AudioAttributes
+import android.media.AudioManager
+import android.media.ToneGenerator
 import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -12,13 +16,17 @@ import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.sriox.vasateysec.R
 import com.sriox.vasateysec.utils.FCMTokenManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 class VasateyFCMService : FirebaseMessagingService() {
 
     companion object {
         private const val TAG = "VasateyFCMService"
-        private const val CHANNEL_ID = "guardian_alert_channel"
-        private const val CHANNEL_NAME = "Safety Alerts"
+        private const val CHANNEL_ID = "guardian_alert_channel_v4"
+        private const val CHANNEL_NAME = "Critical Safety Alerts"
     }
 
     override fun onCreate() {
@@ -98,6 +106,14 @@ class VasateyFCMService : FirebaseMessagingService() {
 
         if (isSelfAlert) return
 
+        val prefs = getSharedPreferences("vasatey_settings", Context.MODE_PRIVATE)
+        val soundEnabled = prefs.getBoolean("sound_enabled", true)
+
+        // Programmatic Siren Effect (Single Beep Siren)
+        if (soundEnabled) {
+            playEmergencySirenEffect()
+        }
+
         val intent = Intent(this, com.sriox.vasateysec.EmergencyAlertViewerActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK
             putExtra("fullName", fullName)
@@ -120,7 +136,7 @@ class VasateyFCMService : FirebaseMessagingService() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+        val notificationBuilder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle("🚨 Emergency Alert from $fullName")
             .setContentText("$fullName needs help! Tap to view location.")
@@ -128,13 +144,32 @@ class VasateyFCMService : FirebaseMessagingService() {
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
-            .setVibrate(longArrayOf(0, 500, 200, 500, 200, 500))
-            .setSound(android.provider.Settings.System.DEFAULT_NOTIFICATION_URI)
+            .setVibrate(longArrayOf(0, 1000, 500, 1000, 500, 1000))
             .setColor(android.graphics.Color.RED)
-            .build()
+            .setFullScreenIntent(pendingIntent, true)
+            .setSound(null) // Remove soft alarm sound
 
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        notificationManager.notify(System.currentTimeMillis().toInt(), notification)
+        notificationManager.notify(alertId.hashCode(), notificationBuilder.build())
+    }
+
+    /**
+     * Programmatically generates a siren-like pulsing sound using a single distinct beep tone.
+     */
+    private fun playEmergencySirenEffect() {
+        CoroutineScope(Dispatchers.Default).launch {
+            try {
+                val toneGen = ToneGenerator(AudioManager.STREAM_ALARM, 100)
+                // Repeat a single high-pitched tone for a "beep-beep" siren effect
+                repeat(10) {
+                    toneGen.startTone(ToneGenerator.TONE_SUP_ERROR, 500) 
+                    delay(800)
+                }
+                toneGen.release()
+            } catch (e: Exception) {
+                Log.e(TAG, "Siren effect failed", e)
+            }
+        }
     }
     
     private fun handleAlertConfirmation(data: Map<String, String>) {
@@ -190,33 +225,49 @@ class VasateyFCMService : FirebaseMessagingService() {
     private fun handleAlertNotCancelled(data: Map<String, String>) {
         val title = data["title"] ?: "🚨 Alert Still Active"
         val body = data["body"] ?: "User did not cancel. This is a real emergency!"
+
+        val prefs = getSharedPreferences("vasatey_settings", Context.MODE_PRIVATE)
+        val soundEnabled = prefs.getBoolean("sound_enabled", true)
         
-        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+        if (soundEnabled) {
+            playEmergencySirenEffect()
+        }
+
+        val notificationBuilder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle(title)
             .setContentText(body)
             .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setAutoCancel(true)
-            .setVibrate(longArrayOf(0, 500, 200, 500, 200, 500))
-            .setSound(android.provider.Settings.System.DEFAULT_NOTIFICATION_URI)
+            .setVibrate(longArrayOf(0, 1000, 500, 1000))
             .setColor(android.graphics.Color.RED)
-            .build()
+            .setSound(null) // Remove soft alarm sound
         
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        notificationManager.notify(System.currentTimeMillis().toInt(), notification)
+        notificationManager.notify(System.currentTimeMillis().toInt(), notificationBuilder.build())
     }
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            
+            // Delete old channels to ensure new settings apply
+            notificationManager.deleteNotificationChannel("guardian_alert_channel")
+            notificationManager.deleteNotificationChannel("guardian_alert_channel_v2")
+            notificationManager.deleteNotificationChannel("guardian_alert_channel_v3")
+
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 CHANNEL_NAME,
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "Safety alerts and contact requests"
+                description = "Critical Safety Alerts"
                 enableVibration(true)
+                setSound(null, null) // Disable system sound for this channel
+                setBypassDnd(true)
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
             }
-            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             notificationManager.createNotificationChannel(channel)
         }
     }
