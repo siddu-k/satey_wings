@@ -73,12 +73,17 @@ class HomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
     companion object {
         private const val RECORD_AUDIO_PERMISSION_CODE = 123
         private const val ALL_PERMISSIONS_CODE = 126
+        private const val PREF_SOS_ACTIVE = "is_sos_active_persistent"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityHomeBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        // Restore SOS state from persistence
+        val prefs = getSharedPreferences("vasatey_settings", MODE_PRIVATE)
+        isSosActive = prefs.getBoolean(PREF_SOS_ACTIVE, false)
 
         setupQuickActions()
         setupBottomNavigation()
@@ -152,7 +157,12 @@ class HomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
         val isHardwareEnabled = prefs.getBoolean("hardware_sos_enabled", false)
         if (isHardwareEnabled) {
             binding.hardwareStatusLayout.visibility = View.VISIBLE
-            updateHardwareStatusUi(BleGuardianService.STATUS_DISCONNECTED)
+            // If it was SOS active before closing, show it immediately
+            if (isSosActive) {
+                updateHardwareStatusUi(BleGuardianService.STATUS_SOS_ACTIVE)
+            } else {
+                updateHardwareStatusUi(BleGuardianService.STATUS_DISCONNECTED)
+            }
         } else {
             binding.hardwareStatusLayout.visibility = View.GONE
         }
@@ -160,13 +170,19 @@ class HomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
 
     private fun updateHardwareStatusUi(status: String?) {
         binding.hardwareStatusLayout.visibility = View.VISIBLE
+        val prefs = getSharedPreferences("vasatey_settings", MODE_PRIVATE)
         
-        // Lock UI in SOS state until "0" (CONNECTED) or DISCONNECTED is received
+        // Handle persistent SOS state locking
         if (isSosActive) {
-            if (status == BleGuardianService.STATUS_CONNECTED || status == BleGuardianService.STATUS_DISCONNECTED) {
+            // Only clear SOS state if we get "0" (STATUS_CONNECTED)
+            if (status == BleGuardianService.STATUS_CONNECTED) {
                 isSosActive = false
+                prefs.edit().putBoolean(PREF_SOS_ACTIVE, false).apply()
             } else {
-                return // Stay in SOS ACTIVE state
+                // Ensure UI remains in SOS ACTIVE even if searching/syncing
+                binding.hardwareStatusDot.backgroundTintList = ColorStateList.valueOf(Color.RED)
+                binding.hardwareStatusText.text = "SOS ACTIVE"
+                return
             }
         }
 
@@ -181,6 +197,7 @@ class HomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
             }
             BleGuardianService.STATUS_SOS_ACTIVE -> {
                 isSosActive = true
+                prefs.edit().putBoolean(PREF_SOS_ACTIVE, true).apply()
                 binding.hardwareStatusDot.backgroundTintList = ColorStateList.valueOf(Color.RED)
                 binding.hardwareStatusText.text = "SOS ACTIVE"
             }
