@@ -136,3 +136,18 @@ data class SmsContact(
     val phone: String,
     val created_at: String? = null
 )
+
+@Serializable
+data class EmergencyProfile(
+    val id: String? = null,
+    val user_id: String,
+    val full_name: String,
+    val blood_group: String? = null,
+    val contact_1: String? = null,
+    val contact_2: String? = null,
+    val contact_3: String? = null,
+    val home_latitude: Double? = null,
+    val home_longitude: Double? = null,
+    val medical_notes: String? = null,
+    val updated_at: String? = null
+)

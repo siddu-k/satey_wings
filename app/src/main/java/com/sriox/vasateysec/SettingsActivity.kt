@@ -41,6 +41,7 @@ class SettingsActivity : AppCompatActivity() {
         setupHeader()
         loadSettings()
         setupSwitches()
+        setupIntervalSaving()
         setupWakeWordCard()
         setupOpenRouterHandling()
         setupHardwareScan()
@@ -63,8 +64,13 @@ class SettingsActivity : AppCompatActivity() {
         binding.switchSound.isChecked = prefs.getBoolean("sound_enabled", true)
         binding.switchHardwareSos.isChecked = prefs.getBoolean("hardware_sos_enabled", false)
         binding.switchHardwareGps.isChecked = prefs.getBoolean("use_hardware_gps", false)
+        binding.switchHardwareAutoCall.isChecked = prefs.getBoolean("hardware_auto_call_enabled", false)
         
         binding.switchDoubleWord.isChecked = prefs.getBoolean("double_word_enabled", true)
+
+        // Load interval
+        val interval = prefs.getInt("hardware_sms_interval", 2)
+        binding.etSmsInterval.setText(interval.toString())
 
         // Set defaults from local storage first
         binding.etOpenRouterApiKey.setText(prefs.getString("gemini_api_key", ""))
@@ -87,8 +93,6 @@ class SettingsActivity : AppCompatActivity() {
                         binding.etOpenRouterApiKey.setText(userProfile.gemini_api_key)
                         prefs.edit().putString("gemini_api_key", userProfile.gemini_api_key).apply()
                     }
-                    
-                    // Optional: If you also save model name to DB, sync it here too
                 }
             } catch (e: Exception) {
                 android.util.Log.e("Settings", "Failed to sync cloud settings: ${e.message}")
@@ -129,9 +133,28 @@ class SettingsActivity : AppCompatActivity() {
             prefs.edit().putBoolean("use_hardware_gps", isChecked).apply()
             showToast(if (isChecked) "Hardware GPS prioritized" else "Mobile GPS prioritized")
         }
+        binding.switchHardwareAutoCall.setOnCheckedChangeListener { _: CompoundButton, isChecked: Boolean ->
+            prefs.edit().putBoolean("hardware_auto_call_enabled", isChecked).apply()
+            showToast(if (isChecked) "Hardware Auto-Call enabled" else "Hardware Auto-Call disabled")
+        }
         binding.switchDoubleWord.setOnCheckedChangeListener { _: CompoundButton, isChecked: Boolean ->
             prefs.edit().putBoolean("double_word_enabled", isChecked).apply()
             showToast(if (isChecked) "Double trigger active" else "Single trigger active")
+        }
+    }
+
+    private fun setupIntervalSaving() {
+        binding.btnSaveInterval.setOnClickListener {
+            val intervalStr = binding.etSmsInterval.text.toString()
+            if (intervalStr.isNotEmpty()) {
+                val interval = intervalStr.toIntOrNull() ?: 2
+                if (interval >= 1) {
+                    prefs.edit().putInt("hardware_sms_interval", interval).apply()
+                    showToast("Alert interval set to $interval minutes")
+                } else {
+                    showToast("Interval must be at least 1 minute")
+                }
+            }
         }
     }
 

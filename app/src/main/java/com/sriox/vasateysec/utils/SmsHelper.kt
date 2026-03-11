@@ -6,7 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
-import android.os.SystemClock
+import android.os.Build
 import android.telephony.SmsManager
 import android.util.Log
 import androidx.core.content.ContextCompat
@@ -24,24 +24,64 @@ object SmsHelper {
     private const val PREFS_NAME = "trusted_contacts_storage"
     private const val STORAGE_KEY = "permanent_sms_contacts"
     private const val ACTION_SMS_SENT = "com.sriox.vasateysec.SMS_SENT"
+    private const val KEY_LAST_SENT_TIME = "last_sms_sent_timestamp"
     
-    private var lastSmsSentTime = 0L
-
-    suspend fun sendEmergencySms(context: Context, latitude: Double?, longitude: Double?, forceSms: Boolean = false) {
-        val alertPrefs = context.getSharedPreferences("alert_settings", Context.MODE_PRIVATE)
-        val smsEnabled = alertPrefs.getBoolean("sms_alert_enabled", false) || forceSms
-        val autoCallEnabled = alertPrefs.getBoolean("auto_call_enabled", false)
-
-        Log.d(TAG, "🔍 Initial Check - smsEnabled: $smsEnabled, forceSms: $forceSms")
-
+    /**
+     * Gets the remaining time in milliseconds until the next SMS can be sent for hardware triggers.
+     * Uses persistent storage to ensure accuracy even after app restarts.
+     */
+    fun getRemainingCooldownMs(context: Context): Long {
         val settingsPrefs = context.getSharedPreferences("vasatey_settings", Context.MODE_PRIVATE)
         val cooldownMinutes = settingsPrefs.getInt("hardware_sms_interval", 2)
         val smsCooldownMs = cooldownMinutes * 60 * 1000L
         
-        val currentTime = SystemClock.elapsedRealtime()
+        val lastSentTime = settingsPrefs.getLong(KEY_LAST_SENT_TIME, 0L)
+        val currentTime = System.currentTimeMillis()
+        val timeDiff = currentTime - lastSentTime
         
-        if (forceSms && (currentTime - lastSmsSentTime < smsCooldownMs)) {
-            Log.d(TAG, "🚫 Spam Blocked: Cooldown of $cooldownMinutes min is active for hardware.")
+        return if (lastSentTime > 0 && timeDiff < smsCooldownMs) {
+            smsCooldownMs - timeDiff
+        } else {
+            0L
+        }
+    }
+
+    /**
+     * Sends emergency SMS and triggers auto-call.
+     * Uses persistent timestamps to fix the 2-minute timer bug.
+     */
+    suspend fun sendEmergencySms(
+        context: Context, 
+        latitude: Double?, 
+        longitude: Double?, 
+        isHardware: Boolean = false
+    ) {
+        val alertPrefs = context.getSharedPreferences("alert_settings", Context.MODE_PRIVATE)
+        val settingsPrefs = context.getSharedPreferences("vasatey_settings", Context.MODE_PRIVATE)
+        
+        // SMS: Always ON for hardware triggers.
+        val smsEnabled = if (isHardware) true else alertPrefs.getBoolean("sms_alert_enabled", false)
+        
+        // Auto-Call: Now strictly respects the "Hardware Auto Call" toggle for ESP32.
+        val autoCallEnabled = if (isHardware) {
+            settingsPrefs.getBoolean("hardware_auto_call_enabled", false)
+        } else {
+            alertPrefs.getBoolean("auto_call_enabled", false)
+        }
+
+        val cooldownMinutes = settingsPrefs.getInt("hardware_sms_interval", 2)
+        val smsCooldownMs = cooldownMinutes * 60 * 1000L
+        
+        val lastSentTime = settingsPrefs.getLong(KEY_LAST_SENT_TIME, 0L)
+        val currentTime = System.currentTimeMillis()
+        val timeDiff = currentTime - lastSentTime
+        
+        Log.d(TAG, "🏁 SOS_TRIGGER -> Hardware: $isHardware, SMS: $smsEnabled, Call: $autoCallEnabled")
+
+        // Apply persistent cooldown for hardware
+        if (isHardware && lastSentTime > 0 && timeDiff < smsCooldownMs) {
+            val remaining = (smsCooldownMs - timeDiff) / 1000
+            Log.d(TAG, "🚫 Persistent Cooldown Active: $remaining seconds left.")
             return
         }
 
@@ -57,87 +97,87 @@ object SmsHelper {
                         if (contacts.isNotEmpty()) saveToLocalStorage(context, contacts)
                     }
                 } catch (e: Exception) {
-                    Log.w(TAG, "🌐 Supabase Fetch Failed: ${e.message}")
+                    Log.w(TAG, "🌐 Fallback to Local Storage")
                 }
 
                 if (contacts.isEmpty()) contacts = getFromLocalStorage(context)
-                
                 if (contacts.isEmpty()) {
-                    Log.e(TAG, "❌ No contacts found.")
+                    Log.e(TAG, "❌ ABORT: No contacts found.")
                     return@withContext
                 }
 
+                // 1. SMS Sequence
                 if (smsEnabled) {
-                    if (ContextCompat.checkSelfPermission(context, Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED) {
-                        val userName = SessionManager.getUserName() ?: "User"
-                        val locationUrl = if (latitude != null && longitude != null) "https://maps.google.com/?q=$latitude,$longitude" else "Location unavailable"
-                        val message = "🚨 SOS ALERT! 🚨\n$userName needs help!\nLocation: $locationUrl"
-
-                        val smsManager = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-                            context.getSystemService(SmsManager::class.java)
-                        } else {
-                            @Suppress("DEPRECATION")
-                            SmsManager.getDefault()
-                        }
-
-                        if (smsManager == null) {
-                            Log.e(TAG, "❌ SmsManager is NULL")
-                            return@withContext
-                        }
-
-                        for (contact in contacts) {
-                            Log.d(TAG, "📤 Sending to: ${contact.phone}")
-                            
-                            val sentIntent = Intent(ACTION_SMS_SENT).apply {
-                                putExtra("phone", contact.phone)
-                                setPackage(context.packageName)
-                            }
-                            
-                            val pendingIntent = PendingIntent.getBroadcast(
-                                context, 
-                                contact.phone.hashCode(), 
-                                sentIntent, 
-                                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-                            )
-
-                            // Important: If message is long, it might need divideMessage
-                            val parts = smsManager.divideMessage(message)
-                            if (parts.size > 1) {
-                                Log.d(TAG, "Message too long, sending as multipart (${parts.size} parts)")
-                                val sentIntents = ArrayList<PendingIntent>()
-                                for (i in parts.indices) sentIntents.add(pendingIntent)
-                                smsManager.sendMultipartTextMessage(contact.phone, null, parts, sentIntents, null)
-                            } else {
-                                smsManager.sendTextMessage(contact.phone, null, message, pendingIntent, null)
-                            }
-                        }
-                        
-                        lastSmsSentTime = SystemClock.elapsedRealtime()
-                        Log.d(TAG, "✅ SMS triggered for ${contacts.size} contacts")
-                    } else {
-                        Log.e(TAG, "❌ Permission SEND_SMS Missing")
-                    }
+                    sendSmsSequence(context, contacts, latitude, longitude)
+                    // PERSIST the sent time immediately
+                    settingsPrefs.edit().putLong(KEY_LAST_SENT_TIME, System.currentTimeMillis()).apply()
+                    Log.d(TAG, "✅ SMS Sent and Timestamp Persisted")
                 }
 
+                // 2. Auto-Call Sequence
                 if (autoCallEnabled) {
                     val selectedPhone = alertPrefs.getString("auto_call_recipient", null)
-                    val callTarget = selectedPhone ?: contacts.firstOrNull()?.phone
+                    var callTarget = selectedPhone ?: contacts.firstOrNull()?.phone
+                    
                     if (callTarget != null) {
-                        withContext(Dispatchers.Main) { triggerAutoCall(context, callTarget) }
+                        Log.d(TAG, "📞 Triggering Auto-Call to: $callTarget")
+                        withContext(Dispatchers.Main) { 
+                            triggerAutoCall(context, callTarget) 
+                        }
                     }
                 }
                 
             } catch (e: Exception) {
-                Log.e(TAG, "🆘 Error: ${e.message}", e)
+                Log.e(TAG, "🆘 Emergency Error: ${e.message}")
             }
         }
     }
 
+    private fun sendSmsSequence(context: Context, contacts: List<SmsContact>, latitude: Double?, longitude: Double?) {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) return
+
+        val userName = SessionManager.getUserName() ?: "User"
+        val locationUrl = if (latitude != null && longitude != null) "https://maps.google.com/?q=$latitude,$longitude" else "Location unknown"
+        val message = "🚨 SOS ALERT! $userName needs help!\nLocation: $locationUrl"
+
+        val smsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            context.getSystemService(SmsManager::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            SmsManager.getDefault()
+        }
+
+        for (contact in contacts) {
+            var phone = contact.phone.trim()
+            if (phone.length == 10 && !phone.startsWith("+")) phone = "+91$phone"
+
+            val sentIntent = Intent(ACTION_SMS_SENT).apply { 
+                putExtra("phone", phone)
+                setPackage(context.packageName)
+            }
+            val pendingIntent = PendingIntent.getBroadcast(context, phone.hashCode(), sentIntent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+
+            try {
+                val parts = smsManager.divideMessage(message)
+                if (parts.size > 1) {
+                    val sentIntents = ArrayList<PendingIntent>()
+                    for (i in parts.indices) sentIntents.add(pendingIntent)
+                    smsManager.sendMultipartTextMessage(phone, null, parts, sentIntents, null)
+                } else {
+                    smsManager.sendTextMessage(phone, null, message, pendingIntent, null)
+                }
+            } catch (e: Exception) { }
+        }
+    }
+
     private fun triggerAutoCall(context: Context, phoneNumber: String) {
+        var phone = phoneNumber.trim()
+        if (phone.length == 10 && !phone.startsWith("+")) phone = "+91$phone"
+
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED) {
             try {
-                val callIntent = Intent(Intent.ACTION_CALL, Uri.parse("tel:${phoneNumber.trim()}"))
-                callIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                val callIntent = Intent(Intent.ACTION_CALL, Uri.parse("tel:$phone"))
+                callIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 context.startActivity(callIntent)
             } catch (e: Exception) { }
         }
@@ -151,10 +191,6 @@ object SmsHelper {
     fun getFromLocalStorage(context: Context): List<SmsContact> {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val json = prefs.getString(STORAGE_KEY, null)
-        return if (json != null) {
-            try {
-                Json.decodeFromString<List<SmsContact>>(json)
-            } catch (e: Exception) { emptyList() }
-        } else emptyList()
+        return if (json != null) try { Json.decodeFromString(json) } catch (e: Exception) { emptyList() } else emptyList()
     }
 }

@@ -19,6 +19,9 @@
     <uses-permission android:name="android.permission.SEND_SMS" />
     <uses-permission android:name="android.permission.CALL_PHONE" />
 
+    <!-- Permission to bypass background activity restrictions -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
     <uses-feature android:name="android.hardware.telephony" android:required="false" />
 
     <!-- Bluetooth Permissions -->
@@ -36,7 +39,6 @@
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.camera.front" android:required="false" />
 
-    <!-- Permission for Alarm-like high priority notifications -->
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
 
     <application
@@ -88,6 +90,9 @@
         <activity android:name=".AiChatActivity" android:exported="false" android:theme="@style/Theme.Vasateysec" />
         <activity android:name=".BleDeviceScanActivity" android:exported="false" android:theme="@style/Theme.Vasateysec" />
 
+        <!-- Emergency QR Profile Activity -->
+        <activity android:name=".EmergencyProfileActivity" android:exported="false" android:theme="@style/Theme.Vasateysec" />
+
         <service android:name=".VoskWakeWordService" android:foregroundServiceType="microphone" android:exported="false" />
         <service android:name=".services.VasateyFCMService" android:exported="false">
             <intent-filter>
@@ -95,7 +100,6 @@
             </intent-filter>
         </service>
 
-        <!-- BLE Hardware Service -->
         <service android:name=".services.BleGuardianService" android:foregroundServiceType="connectedDevice" android:exported="false" />
 
         <receiver android:name=".utils.SmsSentReceiver" android:exported="false">

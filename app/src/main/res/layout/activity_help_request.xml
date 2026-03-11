@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/background_dark">
@@ -15,13 +16,12 @@
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
-            <!-- Emergency Header with Gradient -->
+            <!-- Header -->
             <FrameLayout
                 android:layout_width="match_parent"
-                android:layout_height="220dp"
+                android:layout_height="200dp"
                 android:background="@drawable/gradient_header_golden">
 
-                <!-- Animated Alert Icon -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -31,239 +31,40 @@
                     android:padding="24dp">
 
                     <ImageView
-                        android:layout_width="80dp"
-                        android:layout_height="80dp"
+                        android:id="@+id/headerIcon"
+                        android:layout_width="64dp"
+                        android:layout_height="64dp"
                         android:src="@drawable/ic_sos"
                         android:tint="@color/golden"
                         android:background="@drawable/bg_sos_button"
-                        android:padding="20dp" />
+                        android:padding="16dp" />
 
                     <TextView
+                        android:id="@+id/headerTitle"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="🚨 EMERGENCY ALERT"
+                        android:text="EMERGENCY ALERT"
                         android:textColor="@color/text_primary"
-                        android:textSize="24sp"
+                        android:textSize="22sp"
                         android:textStyle="bold"
-                        android:layout_marginTop="16dp"
-                        android:fontFamily="sans-serif-medium" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Someone needs your help immediately"
-                        android:textColor="@color/text_secondary"
-                        android:textSize="14sp"
-                        android:layout_marginTop="8dp" />
+                        android:layout_marginTop="12dp" />
                 </LinearLayout>
             </FrameLayout>
 
-            <!-- Content -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:padding="20dp"
+                android:padding="16dp"
                 android:paddingBottom="100dp">
 
-                <!-- User Info Card -->
+                <!-- Profile Info Card -->
                 <com.google.android.material.card.MaterialCardView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginBottom="16dp"
                     app:cardBackgroundColor="#2A2A2A"
-                    app:cardCornerRadius="20dp"
-                    app:cardElevation="4dp"
-                    app:strokeWidth="1dp"
-                    app:strokeColor="#404040">
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical"
-                        android:padding="24dp">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Request From"
-                            android:textColor="@color/text_tertiary"
-                            android:textSize="12sp"
-                            android:textStyle="bold"
-                            android:layout_marginBottom="12dp" />
-
-                        <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="horizontal"
-                            android:gravity="center_vertical">
-
-                            <FrameLayout
-                                android:layout_width="56dp"
-                                android:layout_height="56dp"
-                                android:background="@drawable/bg_rounded_card">
-
-                                <ImageView
-                                    android:layout_width="32dp"
-                                    android:layout_height="32dp"
-                                    android:layout_gravity="center"
-                                    android:src="@drawable/ic_profile"
-                                    android:tint="@color/golden" />
-                            </FrameLayout>
-
-                            <LinearLayout
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:orientation="vertical"
-                                android:layout_marginStart="16dp">
-
-                                <TextView
-                                    android:id="@+id/userName"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="John Doe"
-                                    android:textColor="@color/text_primary"
-                                    android:textSize="22sp"
-                                    android:textStyle="bold" />
-
-                                <TextView
-                                    android:id="@+id/userEmail"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="john@example.com"
-                                    android:textColor="@color/text_secondary"
-                                    android:textSize="14sp"
-                                    android:layout_marginTop="4dp" />
-                            </LinearLayout>
-                        </LinearLayout>
-
-                        <!-- Divider -->
-                        <View
-                            android:layout_width="match_parent"
-                            android:layout_height="1dp"
-                            android:background="@color/card_elevated"
-                            android:layout_marginTop="20dp"
-                            android:layout_marginBottom="20dp" />
-
-                        <!-- Contact Info -->
-                        <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="vertical">
-
-                            <!-- Phone -->
-                            <LinearLayout
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:orientation="horizontal"
-                                android:gravity="center_vertical"
-                                android:layout_marginBottom="12dp">
-
-                                <ImageView
-                                    android:layout_width="24dp"
-                                    android:layout_height="24dp"
-                                    android:src="@android:drawable/ic_menu_call"
-                                    android:tint="@color/golden" />
-
-                                <TextView
-                                    android:id="@+id/userPhone"
-                                    android:layout_width="0dp"
-                                    android:layout_height="wrap_content"
-                                    android:layout_weight="1"
-                                    android:text="+1234567890"
-                                    android:textColor="@color/text_primary"
-                                    android:textSize="16sp"
-                                    android:layout_marginStart="16dp" />
-                            </LinearLayout>
-
-                            <!-- Time -->
-                            <LinearLayout
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:orientation="horizontal"
-                                android:gravity="center_vertical">
-
-                                <ImageView
-                                    android:layout_width="24dp"
-                                    android:layout_height="24dp"
-                                    android:src="@android:drawable/ic_menu_recent_history"
-                                    android:tint="@color/golden" />
-
-                                <TextView
-                                    android:id="@+id/alertTime"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="Just now"
-                                    android:textColor="@color/text_primary"
-                                    android:textSize="16sp"
-                                    android:layout_marginStart="16dp" />
-                            </LinearLayout>
-                        </LinearLayout>
-                    </LinearLayout>
-                </com.google.android.material.card.MaterialCardView>
-
-                <!-- Action Buttons -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:layout_marginBottom="16dp">
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/callButton"
-                        android:layout_width="0dp"
-                        android:layout_height="64dp"
-                        android:layout_weight="1"
-                        android:text="Call Now"
-                        android:textSize="16sp"
-                        android:textColor="@color/background_dark"
-                        android:layout_marginEnd="8dp"
-                        app:backgroundTint="@color/golden"
-                        app:cornerRadius="20dp"
-                        app:icon="@android:drawable/ic_menu_call"
-                        app:iconTint="@color/background_dark"
-                        app:iconGravity="textStart" />
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/navigateButton"
-                        android:layout_width="0dp"
-                        android:layout_height="64dp"
-                        android:layout_weight="1"
-                        android:text="Navigate"
-                        android:textSize="16sp"
-                        android:textColor="@color/background_dark"
-                        android:layout_marginStart="8dp"
-                        app:backgroundTint="@color/golden"
-                        app:cornerRadius="20dp"
-                        app:icon="@android:drawable/ic_menu_mylocation"
-                        app:iconTint="@color/background_dark"
-                        app:iconGravity="textStart" />
-                </LinearLayout>
-
-                <!-- Confirm Alert Button -->
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/confirmAlertButton"
-                    android:layout_width="match_parent"
-                    android:layout_height="64dp"
-                    android:text="✅ Confirm Alert"
-                    android:textSize="16sp"
-                    android:textColor="@color/text_primary"
-                    android:layout_marginBottom="16dp"
-                    app:backgroundTint="#4CAF50"
-                    app:cornerRadius="20dp"
-                    app:icon="@android:drawable/ic_menu_send"
-                    app:iconTint="@color/text_primary"
-                    app:iconGravity="textStart" />
-
-                <!-- Location Card -->
-                <com.google.android.material.card.MaterialCardView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginBottom="16dp"
-                    app:cardBackgroundColor="#2A2A2A"
-                    app:cardCornerRadius="20dp"
-                    app:cardElevation="4dp"
+                    app:cardCornerRadius="16dp"
                     app:strokeWidth="1dp"
                     app:strokeColor="#404040">
 
@@ -273,56 +74,224 @@
                         android:orientation="vertical"
                         android:padding="20dp">
 
+                        <TextView
+                            android:id="@+id/userName"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="User Name"
+                            android:textColor="@color/text_primary"
+                            android:textSize="20sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/userEmail"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="email@example.com"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="14sp"
+                            android:layout_marginTop="2dp" />
+
+                        <TextView
+                            android:id="@+id/userPhone"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="+1234567890"
+                            android:textColor="@color/golden"
+                            android:textSize="16sp"
+                            android:layout_marginTop="8dp" />
+
+                        <!-- Medical Info (Shown only in QR mode) -->
                         <LinearLayout
+                            android:id="@+id/medicalInfoLayout"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:orientation="horizontal"
-                            android:gravity="center_vertical"
-                            android:layout_marginBottom="12dp">
+                            android:orientation="vertical"
+                            android:visibility="gone"
+                            tools:visibility="visible">
 
-                            <ImageView
-                                android:layout_width="24dp"
-                                android:layout_height="24dp"
-                                android:src="@android:drawable/ic_menu_mylocation"
-                                android:tint="@color/golden" />
+                            <View
+                                android:layout_width="match_parent"
+                                android:layout_height="1dp"
+                                android:background="#20FFFFFF"
+                                android:layout_marginVertical="12dp" />
 
                             <TextView
-                                android:layout_width="0dp"
+                                android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:text="Location"
+                                android:text="Blood Group"
+                                android:textColor="@color/text_tertiary"
+                                android:textSize="12sp" />
+
+                            <TextView
+                                android:id="@+id/tvBloodGroup"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="O+"
                                 android:textColor="@color/text_primary"
-                                android:textSize="18sp"
-                                android:textStyle="bold"
-                                android:layout_marginStart="12dp" />
+                                android:textSize="16sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Medical Notes"
+                                android:textColor="@color/text_tertiary"
+                                android:textSize="12sp"
+                                android:layout_marginTop="8dp" />
+
+                            <TextView
+                                android:id="@+id/tvMedicalNotes"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="No specific medical notes"
+                                android:textColor="@color/text_primary"
+                                android:textSize="14sp" />
                         </LinearLayout>
 
                         <TextView
-                            android:id="@+id/locationCoordinates"
-                            android:layout_width="match_parent"
+                            android:id="@+id/alertTime"
+                            android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Lat: 0.0, Long: 0.0"
-                            android:textColor="@color/text_secondary"
-                            android:textSize="14sp"
-                            android:layout_marginBottom="12dp" />
-
-                        <!-- Map -->
-                        <com.google.android.material.card.MaterialCardView
-                            android:layout_width="match_parent"
-                            android:layout_height="200dp"
-                            app:cardCornerRadius="16dp"
-                            app:cardElevation="4dp">
-
-                            <fragment
-                                android:id="@+id/mapFragment"
-                                android:name="com.google.android.gms.maps.SupportMapFragment"
-                                android:layout_width="match_parent"
-                                android:layout_height="match_parent" />
-                        </com.google.android.material.card.MaterialCardView>
+                            android:text="Just now"
+                            android:textColor="@color/text_tertiary"
+                            android:textSize="12sp"
+                            android:layout_marginTop="12dp" />
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
 
-                <!-- Emergency Photos -->
+                <!-- Contacts Card (QR Mode) -->
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/extraContactsCard"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="16dp"
+                    android:visibility="gone"
+                    app:cardBackgroundColor="#2A2A2A"
+                    app:cardCornerRadius="16dp"
+                    app:strokeWidth="1dp"
+                    app:strokeColor="#404040">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="16dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Emergency Contacts"
+                            android:textColor="@color/golden"
+                            android:textSize="14sp"
+                            android:textStyle="bold"
+                            android:layout_marginBottom="12dp" />
+
+                        <Button
+                            android:id="@+id/btnCall1"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Call Contact 1"
+                            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                            android:textColor="@color/text_primary" />
+
+                        <Button
+                            android:id="@+id/btnCall2"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:text="Call Contact 2"
+                            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                            android:textColor="@color/text_primary"
+                            android:visibility="gone" />
+
+                        <Button
+                            android:id="@+id/btnCall3"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:text="Call Contact 3"
+                            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                            android:textColor="@color/text_primary"
+                            android:visibility="gone" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <!-- Actions -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="16dp">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/callButton"
+                        android:layout_width="0dp"
+                        android:layout_height="56dp"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="8dp"
+                        android:text="Call User"
+                        app:backgroundTint="@color/golden"
+                        android:textColor="@color/background_dark"
+                        app:cornerRadius="12dp"
+                        app:icon="@android:drawable/ic_menu_call"
+                        app:iconTint="@color/background_dark" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/navigateButton"
+                        android:layout_width="0dp"
+                        android:layout_height="56dp"
+                        android:layout_weight="1"
+                        android:layout_marginStart="8dp"
+                        android:text="Navigate"
+                        app:backgroundTint="@color/golden"
+                        android:textColor="@color/background_dark"
+                        app:cornerRadius="12dp"
+                        app:icon="@android:drawable/ic_menu_mylocation"
+                        app:iconTint="@color/background_dark" />
+                </LinearLayout>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/confirmAlertButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="56dp"
+                    android:text="Confirm Alert"
+                    app:backgroundTint="#4CAF50"
+                    app:cornerRadius="12dp"
+                    android:layout_marginBottom="16dp" />
+
+                <!-- Map Card -->
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/mapCard"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="16dp"
+                    app:cardBackgroundColor="#2A2A2A"
+                    app:cardCornerRadius="16dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:id="@+id/locationCoordinates"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:padding="12dp"
+                            android:text="Lat: --, Lon: --"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="12sp" />
+
+                        <androidx.fragment.app.FragmentContainerView
+                            android:id="@+id/mapFragment"
+                            android:name="com.google.android.gms.maps.SupportMapFragment"
+                            android:layout_width="match_parent"
+                            android:layout_height="250dp" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <!-- Photo Container -->
                 <LinearLayout
                     android:id="@+id/photosContainer"
                     android:layout_width="match_parent"
@@ -334,94 +303,39 @@
                         android:id="@+id/photosHeader"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="📸 Emergency Photos"
+                        android:text="Photos"
                         android:textColor="@color/text_primary"
-                        android:textSize="18sp"
+                        android:textSize="16sp"
                         android:textStyle="bold"
-                        android:layout_marginBottom="12dp"
-                        android:visibility="gone" />
+                        android:layout_marginBottom="8dp" />
 
-                    <!-- Front Camera Photo -->
                     <com.google.android.material.card.MaterialCardView
                         android:id="@+id/frontPhotoCard"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginBottom="12dp"
-                        android:visibility="gone"
-                        app:cardBackgroundColor="@color/card_background"
-                        app:cardCornerRadius="20dp"
-                        app:cardElevation="6dp">
-
-                        <LinearLayout
+                        app:cardCornerRadius="12dp">
+                        <ImageView
+                            android:id="@+id/frontPhoto"
                             android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="vertical"
-                            android:padding="16dp">
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="Front Camera"
-                                android:textColor="@color/text_secondary"
-                                android:textSize="14sp"
-                                android:layout_marginBottom="8dp" />
-
-                            <ImageView
-                                android:id="@+id/frontPhoto"
-                                android:layout_width="match_parent"
-                                android:layout_height="250dp"
-                                android:scaleType="fitCenter"
-                                android:adjustViewBounds="true"
-                                android:clickable="true"
-                                android:focusable="true"
-                                android:background="?attr/selectableItemBackground"
-                                android:contentDescription="Front Camera Photo" />
-                        </LinearLayout>
+                            android:layout_height="200dp"
+                            android:scaleType="centerCrop" />
                     </com.google.android.material.card.MaterialCardView>
 
-                    <!-- Back Camera Photo -->
                     <com.google.android.material.card.MaterialCardView
                         android:id="@+id/backPhotoCard"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginBottom="12dp"
-                        android:visibility="gone"
-                        app:cardBackgroundColor="@color/card_background"
-                        app:cardCornerRadius="20dp"
-                        app:cardElevation="6dp">
-
-                        <LinearLayout
+                        app:cardCornerRadius="12dp">
+                        <ImageView
+                            android:id="@+id/backPhoto"
                             android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="vertical"
-                            android:padding="16dp">
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="Back Camera"
-                                android:textColor="@color/text_secondary"
-                                android:textSize="14sp"
-                                android:layout_marginBottom="8dp" />
-
-                            <ImageView
-                                android:id="@+id/backPhoto"
-                                android:layout_width="match_parent"
-                                android:layout_height="250dp"
-                                android:scaleType="fitCenter"
-                                android:adjustViewBounds="true"
-                                android:clickable="true"
-                                android:focusable="true"
-                                android:background="?attr/selectableItemBackground"
-                                android:contentDescription="Back Camera Photo" />
-                        </LinearLayout>
+                            android:layout_height="200dp"
+                            android:scaleType="centerCrop" />
                     </com.google.android.material.card.MaterialCardView>
                 </LinearLayout>
 
             </LinearLayout>
-
         </LinearLayout>
-
     </androidx.core.widget.NestedScrollView>
-
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

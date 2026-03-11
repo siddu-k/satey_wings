@@ -46,7 +46,7 @@ object FCMTokenManager {
                 
                 val currentUser = SupabaseClient.client.auth.currentUserOrNull()
                 if (currentUser == null) {
-                    Log.w(TAG, "❌ No user logged in, storing token locally locally only")
+                    Log.w(TAG, "❌ No user logged in, storing token locally only")
                     // Still save locally so we can sync it once user logs in
                     saveTokenLocally(context, token)
                     return@launch
@@ -287,9 +287,8 @@ object FCMTokenManager {
         try {
             Log.d(TAG, "Marking token as validated: ${token.take(20)}...")
             
-            // Update last_validated_at and last_used_at
+            // Update only last_used_at as last_validated_at doesn't exist
             SupabaseClient.client.from("fcm_tokens").update({
-                set("last_validated_at", java.time.Instant.now().toString())
                 set("last_used_at", java.time.Instant.now().toString())
             }) {
                 filter {
@@ -297,9 +296,9 @@ object FCMTokenManager {
                 }
             }
             
-            Log.d(TAG, "✅ Token marked as validated")
+            Log.d(TAG, "✅ Token marked as validated (updated last_used_at)")
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to mark token as validated", e)
+            Log.e(TAG, "Failed to mark token as validated: ${e.message}")
         }
     }
     

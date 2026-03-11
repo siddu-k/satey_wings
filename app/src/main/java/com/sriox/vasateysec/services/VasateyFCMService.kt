@@ -7,7 +7,6 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
-import android.media.AudioAttributes
 import android.media.AudioManager
 import android.media.ToneGenerator
 import android.os.Build
@@ -41,15 +40,20 @@ class VasateyFCMService : FirebaseMessagingService() {
 
     override fun onNewToken(token: String) {
         super.onNewToken(token)
+        Log.d(TAG, "New FCM Token generated: $token")
         FCMTokenManager.updateFCMToken(applicationContext, token)
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
+        Log.d(TAG, "📩 FCM Message Received from: ${message.from}")
         
         message.data.let { data ->
+            Log.d(TAG, "Message Data Payload: $data")
             if (data.isNotEmpty()) {
                 val messageType = data["type"] ?: "alert"
+                Log.d(TAG, "Handling message type: $messageType")
+                
                 when (messageType) {
                     "location_request" -> {
                         LiveLocationHelper.handleLocationRequest(applicationContext, data)
@@ -62,13 +66,22 @@ class VasateyFCMService : FirebaseMessagingService() {
                     "alert_not_cancelled" -> handleAlertNotCancelled(data)
                     else -> handleDataMessage(data)
                 }
+            } else {
+                Log.w(TAG, "Received message with empty data payload")
             }
+        }
+        
+        // Handle case where it might be a notification-only message
+        message.notification?.let {
+            Log.d(TAG, "Message Notification Body: ${it.body}")
         }
     }
 
     private fun handleContactRequest(data: Map<String, String>) {
         val requestId = data["requestId"] ?: ""
         val fromName = data["fromName"] ?: "Someone"
+        
+        Log.d(TAG, "Processing contact request from $fromName")
         
         val intent = Intent(this, ContactDetailActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
@@ -104,12 +117,14 @@ class VasateyFCMService : FirebaseMessagingService() {
         val longitudeStr = data["lastKnownLongitude"] ?: data["longitude"] ?: ""
         val alertId = data["alertId"] ?: ""
         val alertType = data["alertType"] ?: "emergency"
-        val timestamp = data["timestamp"] ?: ""
         val isSelfAlert = data["isSelfAlert"]?.toBoolean() ?: false
-        val frontPhotoUrl = data["frontPhotoUrl"] ?: ""
-        val backPhotoUrl = data["backPhotoUrl"] ?: ""
 
-        if (isSelfAlert) return
+        Log.d(TAG, "🚨 Processing Emergency Alert for $fullName (ID: $alertId)")
+
+        if (isSelfAlert) {
+            Log.d(TAG, "Ignoring self-alert notification")
+            return
+        }
 
         val prefs = getSharedPreferences("vasatey_settings", Context.MODE_PRIVATE)
         val soundEnabled = prefs.getBoolean("sound_enabled", true)
@@ -127,11 +142,9 @@ class VasateyFCMService : FirebaseMessagingService() {
             putExtra("latitude", latitudeStr)
             putExtra("longitude", longitudeStr)
             putExtra("alertType", alertType)
-            putExtra("timestamp", timestamp)
-            putExtra("frontPhotoUrl", frontPhotoUrl)
-            putExtra("backPhotoUrl", backPhotoUrl)
             putExtra("alertId", alertId)
             putExtra("fromNotification", true)
+            data.forEach { (key, value) -> putExtra(key, value) }
         }
 
         val pendingIntent = PendingIntent.getActivity(
@@ -152,27 +165,24 @@ class VasateyFCMService : FirebaseMessagingService() {
             .setVibrate(longArrayOf(0, 1000, 500, 1000, 500, 1000))
             .setColor(Color.RED)
             .setFullScreenIntent(pendingIntent, true)
-            .setSound(null) // Remove soft alarm sound
+            .setSound(null)
 
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        Log.d(TAG, "Dispatching notification to system...")
         notificationManager.notify(alertId.hashCode(), notificationBuilder.build())
     }
 
-    /**
-     * Programmatically generates a siren-like pulsing sound using a single distinct beep tone.
-     */
     private fun playEmergencySirenEffect() {
         CoroutineScope(Dispatchers.Default).launch {
             try {
                 val toneGen = ToneGenerator(AudioManager.STREAM_ALARM, 100)
-                // Repeat a single high-pitched tone for a "beep-beep" siren effect
                 repeat(10) {
                     toneGen.startTone(ToneGenerator.TONE_SUP_ERROR, 500) 
                     delay(800)
                 }
                 toneGen.release()
             } catch (e: Exception) {
-                Log.e(TAG, "Siren effect failed", e)
+                Log.e(TAG, "Siren effect failed: ${e.message}")
             }
         }
     }
@@ -183,8 +193,10 @@ class VasateyFCMService : FirebaseMessagingService() {
         val alertId = data["alertId"] ?: ""
         val guardianEmail = data["guardianEmail"] ?: ""
         
+        Log.d(TAG, "Showing alert confirmation: $title for alert $alertId from $guardianEmail")
+        
         val intent = Intent(this, AlertConfirmationActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
             putExtra("alertId", alertId)
             putExtra("guardianEmail", guardianEmail)
         }
@@ -214,13 +226,14 @@ class VasateyFCMService : FirebaseMessagingService() {
         val title = data["title"] ?: "✅ Alert Cancelled"
         val body = data["body"] ?: "The user has cancelled the alert"
         
+        Log.d(TAG, "Showing alert cancellation")
+        
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle(title)
             .setContentText(body)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setAutoCancel(true)
-            .setColor(Color.parseColor("#4CAF50"))
             .build()
         
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -231,10 +244,10 @@ class VasateyFCMService : FirebaseMessagingService() {
         val title = data["title"] ?: "🚨 Alert Still Active"
         val body = data["body"] ?: "User did not cancel. This is a real emergency!"
 
+        Log.d(TAG, "Processing Alert Not Cancelled notification")
+
         val prefs = getSharedPreferences("vasatey_settings", Context.MODE_PRIVATE)
-        val soundEnabled = prefs.getBoolean("sound_enabled", true)
-        
-        if (soundEnabled) {
+        if (prefs.getBoolean("sound_enabled", true)) {
             playEmergencySirenEffect()
         }
 
@@ -247,7 +260,7 @@ class VasateyFCMService : FirebaseMessagingService() {
             .setAutoCancel(true)
             .setVibrate(longArrayOf(0, 1000, 500, 1000))
             .setColor(Color.RED)
-            .setSound(null) // Remove soft alarm sound
+            .setSound(null)
         
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         notificationManager.notify(System.currentTimeMillis().toInt(), notificationBuilder.build())
@@ -257,11 +270,6 @@ class VasateyFCMService : FirebaseMessagingService() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             
-            // Delete old channels to ensure new settings apply
-            notificationManager.deleteNotificationChannel("guardian_alert_channel")
-            notificationManager.deleteNotificationChannel("guardian_alert_channel_v2")
-            notificationManager.deleteNotificationChannel("guardian_alert_channel_v3")
-
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 CHANNEL_NAME,
@@ -269,11 +277,12 @@ class VasateyFCMService : FirebaseMessagingService() {
             ).apply {
                 description = "Critical Safety Alerts"
                 enableVibration(true)
-                setSound(null, null) // Disable system sound for this channel
+                setSound(null, null)
                 setBypassDnd(true)
                 lockscreenVisibility = Notification.VISIBILITY_PUBLIC
             }
             notificationManager.createNotificationChannel(channel)
+            Log.d(TAG, "Notification channel created/verified: $CHANNEL_ID")
         }
     }
 }

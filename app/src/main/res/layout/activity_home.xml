@@ -55,43 +55,79 @@
                     android:layout_height="wrap_content"
                     android:layout_gravity="top|start"
                     android:layout_margin="20dp"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical"
+                    android:orientation="vertical"
                     android:background="@drawable/bg_rounded_card"
                     android:paddingHorizontal="12dp"
-                    android:paddingVertical="6dp"
+                    android:paddingVertical="8dp"
                     android:visibility="gone"
                     tools:visibility="visible">
 
-                    <View
-                        android:id="@+id/hardwareStatusDot"
-                        android:layout_width="10dp"
-                        android:layout_height="10dp"
-                        android:background="@drawable/bg_circle_status"
-                        android:backgroundTint="#FF0000" />
-
-                    <TextView
-                        android:id="@+id/hardwareStatusText"
+                    <LinearLayout
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Watch Offline"
-                        android:textColor="@color/text_primary"
-                        android:textSize="12sp"
-                        android:layout_marginStart="8dp" />
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <View
+                            android:id="@+id/hardwareStatusDot"
+                            android:layout_width="10dp"
+                            android:layout_height="10dp"
+                            android:background="@drawable/bg_circle_status"
+                            android:backgroundTint="#808080" />
+
+                        <TextView
+                            android:id="@+id/hardwareStatusText"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Watch Offline"
+                            android:textColor="@color/text_primary"
+                            android:textSize="12sp"
+                            android:layout_marginStart="8dp" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/tvSmsTimer"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Next alert: --:--"
+                        android:textColor="@color/golden"
+                        android:textSize="10sp"
+                        android:layout_marginTop="4dp"
+                        android:visibility="gone"
+                        tools:visibility="visible" />
                 </LinearLayout>
 
-                <!-- Logout Button -->
-                <ImageView
-                    android:id="@+id/logoutButton"
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
+                <!-- Top Right Actions -->
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
                     android:layout_gravity="top|end"
-                    android:layout_margin="20dp"
-                    android:src="@android:drawable/ic_lock_power_off"
-                    android:tint="@color/golden"
-                    android:padding="8dp"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    android:contentDescription="Logout" />
+                    android:layout_margin="16dp"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <!-- QR Scanner Button -->
+                    <ImageView
+                        android:id="@+id/btnQrScanner"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:src="@drawable/ic_qr_code_scanner"
+                        android:tint="@color/golden"
+                        android:padding="8dp"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:contentDescription="Scan QR" />
+
+                    <!-- Logout Button -->
+                    <ImageView
+                        android:id="@+id/logoutButton"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:src="@android:drawable/ic_lock_power_off"
+                        android:tint="@color/golden"
+                        android:padding="8dp"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:contentDescription="Logout" />
+                </LinearLayout>
             </FrameLayout>
 
             <!-- Main Content Cards -->
@@ -442,6 +478,65 @@
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:text="Find shelter or add new safe spots"
+                                android:textColor="@color/text_secondary"
+                                android:textSize="14sp"
+                                android:layout_marginTop="4dp" />
+                        </LinearLayout>
+
+                        <ImageView
+                            android:layout_width="24dp"
+                            android:layout_height="24dp"
+                            android:src="@drawable/ic_arrow_forward"
+                            android:tint="@color/golden" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <!-- Emergency QR Card -->
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/emergencyQrCard"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="16dp"
+                    app:cardBackgroundColor="#2A2A2A"
+                    app:cardCornerRadius="24dp"
+                    app:cardElevation="4dp"
+                    app:strokeWidth="1dp"
+                    app:strokeColor="#404040">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:padding="20dp"
+                        android:gravity="center_vertical">
+
+                        <ImageView
+                            android:layout_width="48dp"
+                            android:layout_height="48dp"
+                            android:src="@drawable/ic_qr_code_scanner"
+                            android:tint="@color/golden"
+                            android:padding="12dp"
+                            android:background="@drawable/bg_rounded_card" />
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginStart="16dp"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Emergency QR Profile"
+                                android:textColor="@color/text_primary"
+                                android:textSize="18sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Manage your medical and contact info"
                                 android:textColor="@color/text_secondary"
                                 android:textSize="14sp"
                                 android:layout_marginTop="4dp" />

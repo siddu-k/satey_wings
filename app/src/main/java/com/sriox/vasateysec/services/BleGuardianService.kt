@@ -24,6 +24,9 @@ class BleGuardianService : Service() {
     
     private var esp32Latitude: Double? = null
     private var esp32Longitude: Double? = null
+    
+    private var isSosModeActive = false
+    private var sosLoopJob: Job? = null
 
     private val serviceUuid = UUID.fromString("00001234-0000-1000-8000-00805f9b34fb")
     private val charUuid = UUID.fromString("00005678-0000-1000-8000-00805f9b34fb")
@@ -133,6 +136,8 @@ class BleGuardianService : Service() {
                 Log.d(TAG, "GATT Disconnected.")
                 gatt.close()
                 bluetoothGatt = null
+                isSosModeActive = false
+                sosLoopJob?.cancel()
                 sendStatusBroadcast(STATUS_DISCONNECTED)
                 attemptReconnect()
             }
@@ -161,18 +166,36 @@ class BleGuardianService : Service() {
             
             when {
                 value == "1" || value == "SOS" -> {
-                    Log.d(TAG, "Watch Status: SOS SIGNAL RECEIVED")
-                    sendStatusBroadcast(STATUS_SOS_ACTIVE)
-                    triggerEmergencyAlert()
+                    if (!isSosModeActive) {
+                        Log.d(TAG, "Watch Status: SOS SIGNAL RECEIVED")
+                        isSosModeActive = true
+                        sendStatusBroadcast(STATUS_SOS_ACTIVE)
+                        startSosLoop()
+                    }
                 }
                 value == "0" || value == "OFF" -> {
                     Log.d(TAG, "Watch Status: SAFE")
+                    isSosModeActive = false
+                    sosLoopJob?.cancel()
                     sendStatusBroadcast(STATUS_CONNECTED)
                 }
                 value.startsWith("GPS:") -> {
                     parseEsp32Gps(value)
                     sendStatusBroadcast(STATUS_GPS_RECEIVED)
                 }
+            }
+        }
+    }
+
+    private fun startSosLoop() {
+        sosLoopJob?.cancel()
+        sosLoopJob = scope.launch {
+            while (isSosModeActive) {
+                performEmergencyActions()
+                // Polling frequently (every 10s) while SOS is active.
+                // SmsHelper.sendEmergencySms handles the actual user-defined interval (e.g. 2 min)
+                // using its persistent timestamp.
+                delay(10000)
             }
         }
     }
@@ -200,10 +223,6 @@ class BleGuardianService : Service() {
         } catch (e: Exception) { }
     }
 
-    private fun triggerEmergencyAlert() {
-        scope.launch { performEmergencyActions() }
-    }
-
     private suspend fun performEmergencyActions() {
         try {
             val prefs = getSharedPreferences("vasatey_settings", MODE_PRIVATE)
@@ -213,9 +232,9 @@ class BleGuardianService : Service() {
             val finalLat = if (useHardwareGps && esp32Latitude != null) esp32Latitude else mobileLoc?.latitude
             val finalLon = if (useHardwareGps && esp32Longitude != null) esp32Longitude else mobileLoc?.longitude
 
-            Log.d(TAG, "Sending SOS SMS via Hardware Trigger (Forced)...")
-            // Pass forceSms = true so it ignores the UI toggle
-            SmsHelper.sendEmergencySms(this@BleGuardianService, finalLat, finalLon, forceSms = true)
+            Log.d(TAG, "Attempting SOS Alert Loop Trigger...")
+            // Pass isHardware = true to apply hardware interval and bypass voice toggles
+            SmsHelper.sendEmergencySms(this@BleGuardianService, finalLat, finalLon, isHardware = true)
         } catch (e: Exception) {
             Log.e(TAG, "PerformEmergencyActions error: ${e.message}")
         }
@@ -236,6 +255,8 @@ class BleGuardianService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        isSosModeActive = false
+        sosLoopJob?.cancel()
         sendStatusBroadcast(STATUS_DISCONNECTED)
         stopScanning()
         bluetoothGatt?.disconnect()

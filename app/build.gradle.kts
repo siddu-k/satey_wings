@@ -166,6 +166,10 @@ dependencies {
     
     // WorkManager for background tasks
     implementation("androidx.work:work-runtime-ktx:2.9.0")
+
+    // QR Code Generation and Scanning
+    implementation("com.google.zxing:core:3.5.3")
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
