@@ -148,8 +148,6 @@ class HomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
     }
 
     private fun showEmergencyDetails(userId: String) {
-        // Here we could open a new activity to show the details from Supabase
-        // For now, let's just toast
         Toast.makeText(this, "Loading Emergency Profile...", Toast.LENGTH_SHORT).show()
         val intent = Intent(this, EmergencyAlertViewerActivity::class.java).apply {
             putExtra("targetUserId", userId)
@@ -230,12 +228,15 @@ class HomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
     private fun updateHardwareStatusUi(status: String?) {
         binding.hardwareStatusLayout.visibility = View.VISIBLE
         val prefs = getSharedPreferences("vasatey_settings", MODE_PRIVATE)
-        if (isSosActive && status == BleGuardianService.STATUS_CONNECTED) {
+        
+        // Clear SOS state on Safe (CONNECTED) or Disconnect
+        if (isSosActive && (status == BleGuardianService.STATUS_CONNECTED || status == BleGuardianService.STATUS_DISCONNECTED)) {
             isSosActive = false
             prefs.edit().putBoolean(PREF_SOS_ACTIVE, false).apply()
             timerHandler.removeCallbacks(timerRunnable)
             binding.tvSmsTimer.visibility = View.GONE
         }
+
         when (status) {
             BleGuardianService.STATUS_CONNECTING -> {
                 binding.hardwareStatusDot.backgroundTintList = ColorStateList.valueOf(if (isSosActive) Color.RED else Color.YELLOW)
@@ -262,8 +263,8 @@ class HomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
                 }
             }
             BleGuardianService.STATUS_DISCONNECTED -> {
-                binding.hardwareStatusDot.backgroundTintList = ColorStateList.valueOf(if (isSosActive) Color.RED else Color.GRAY)
-                binding.hardwareStatusText.text = if (isSosActive) "SOS ACTIVE (Offline)" else "Watch Offline"
+                binding.hardwareStatusDot.backgroundTintList = ColorStateList.valueOf(Color.GRAY)
+                binding.hardwareStatusText.text = "Watch Offline"
             }
         }
     }
@@ -476,6 +477,19 @@ class HomeActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == RECORD_AUDIO_PERMISSION_CODE && grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) startListeningService()
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == OVERLAY_PERMISSION_REQ_CODE) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                if (Settings.canDrawOverlays(this)) {
+                    Toast.makeText(this, "Emergency features enabled", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this, "Overlay permission denied", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
     }
 
     override fun onDestroy() {

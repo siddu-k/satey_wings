@@ -115,6 +115,7 @@ class EmergencyProfileActivity : AppCompatActivity() {
             val mapFrag = supportFragmentManager.findFragmentById(R.id.map_picker_fragment) as? SupportMapFragment
             mapFrag?.getMapAsync { googleMap ->
                 googleMap.mapType = GoogleMap.MAP_TYPE_SATELLITE
+                
                 googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(selectedLatLng, 15f))
                 
                 googleMap.setOnCameraIdleListener {
@@ -136,6 +137,7 @@ class EmergencyProfileActivity : AppCompatActivity() {
                 dialogView.findViewById<View>(R.id.btnConfirmLocation).setOnClickListener {
                     homeLatLng = selectedLatLng
                     binding.tvHomeCoords.text = "Home set: ${homeLatLng?.latitude}, ${homeLatLng?.longitude}"
+                    
                     supportFragmentManager.beginTransaction().remove(mapFrag).commit()
                     dialog.dismiss()
                 }
@@ -163,7 +165,6 @@ class EmergencyProfileActivity : AppCompatActivity() {
             try {
                 val userId = currentUserId ?: return@launch
                 
-                // IMPORTANT: Pass existingProfileId so Supabase updates instead of inserting
                 val profile = EmergencyProfile(
                     id = existingProfileId, 
                     user_id = userId,
@@ -177,10 +178,9 @@ class EmergencyProfileActivity : AppCompatActivity() {
                     medical_notes = binding.etMedicalNotes.text.toString().trim()
                 )
 
-                // Using upsert with the existing ID ensures no duplicate errors
-                SupabaseClient.client.from("emergency_profiles").upsert(profile)
+                // Corrected upsert syntax: onConflict is a named parameter
+                SupabaseClient.client.from("emergency_profiles").upsert(profile, onConflict = "user_id")
                 
-                // Re-fetch to ensure we have the ID if this was the first save
                 if (existingProfileId == null) {
                     loadExistingProfile()
                 }
@@ -197,7 +197,8 @@ class EmergencyProfileActivity : AppCompatActivity() {
     private fun generateQr(userId: String) {
         try {
             val writer = QRCodeWriter()
-            val bitMatrix = writer.encode("vasatey_sos:$userId", BarcodeFormat.QR_CODE, 512, 512)
+            val url = "https://siddu-k.github.io/satey_tracker/emergency-profile.html?user_id=$userId"
+            val bitMatrix = writer.encode(url, BarcodeFormat.QR_CODE, 512, 512)
             val width = bitMatrix.width
             val height = bitMatrix.height
             val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565)
