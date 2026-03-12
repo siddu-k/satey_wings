@@ -7,7 +7,9 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -33,13 +35,19 @@ class VoskWakeWordService : Service(), RecognitionListener {
     private var isWaitingForSecondWord = false
     private var firstWordDetectedTime: Long = 0
     private val doubleWordWindow = 5000 
+    private val NOTIFICATION_ID = 1
+    
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var isListening = false
 
     override fun onCreate() {
         super.onCreate()
         initVosk()
+        startWatchdog()
     }
 
     private fun initVosk() {
+        Log.d("VoskService", "Initializing Vosk Engine...")
         Thread {
             val prefs = getSharedPreferences("vasatey_prefs", MODE_PRIVATE)
             val wakeWord = prefs.getString("wake_word", "help me") ?: "help me"
@@ -48,7 +56,7 @@ class VoskWakeWordService : Service(), RecognitionListener {
                     try {
                         val recognizer = Recognizer(model, 16000f, "[\"$wakeWord\", \"[unk]\"]")
                         speechService = SpeechService(recognizer, 16000f)
-                        speechService?.startListening(this)
+                        startListening()
                     } catch (e: IOException) {
                         Log.e("VoskService", "Recognizer initialization failed", e)
                     }
@@ -59,30 +67,77 @@ class VoskWakeWordService : Service(), RecognitionListener {
         }.start()
     }
 
+    private fun startListening() {
+        try {
+            speechService?.startListening(this)
+            isListening = true
+            Log.d("VoskService", "Voice recognition started")
+        } catch (e: Exception) {
+            Log.e("VoskService", "Failed to start listening: ${e.message}")
+            retryListening()
+        }
+    }
+
+    private fun retryListening() {
+        isListening = false
+        mainHandler.postDelayed({
+            Log.d("VoskService", "Attempting to restart listener...")
+            startListening()
+        }, 3000)
+    }
+
+    // Watchdog to ensure we never stop listening permanently
+    private fun startWatchdog() {
+        mainHandler.postDelayed(object : Runnable {
+            override fun run() {
+                if (!isListening) {
+                    Log.w("VoskService", "Watchdog: Engine not listening, restarting...")
+                    startListening()
+                }
+                mainHandler.postDelayed(this, 20000) // Check every 20 seconds
+            }
+        }, 20000)
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        startForeground(1, createNotification("Listening for wake word..."))
+        startForeground(NOTIFICATION_ID, createNotification("Safety Guardian", "Continuous voice monitoring active"))
         return START_STICKY
     }
 
-    private fun createNotification(contentText: String): Notification {
+    private fun updateNotification(title: String, text: String) {
+        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.notify(NOTIFICATION_ID, createNotification(title, text))
+    }
+
+    private fun createNotification(title: String, contentText: String): Notification {
         val channelId = "VOSK_SERVICE_CHANNEL"
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(channelId, "Wake Word Service", NotificationManager.IMPORTANCE_LOW)
             (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).createNotificationChannel(channel)
         }
         return NotificationCompat.Builder(this, channelId)
-            .setContentTitle("Wake Word Detection")
+            .setContentTitle(title)
             .setContentText(contentText)
             .setSmallIcon(R.mipmap.ic_launcher)
+            .setOngoing(true)
             .build()
     }
 
     override fun onPartialResult(hypothesis: String?) {}
 
     override fun onResult(hypothesis: String?) {
+        processHypothesis(hypothesis)
+    }
+
+    override fun onFinalResult(hypothesis: String?) {
+        processHypothesis(hypothesis)
+    }
+
+    private fun processHypothesis(hypothesis: String?) {
         hypothesis?.let {
             val resultText = getResultTextFromJson(it)
             if (resultText.isNotBlank()) {
+                Log.d("VoskService", "Recognized: $resultText")
                 val currentTime = SystemClock.elapsedRealtime()
                 val settings = getSharedPreferences("vasatey_settings", MODE_PRIVATE)
                 val isDoubleWordEnabled = settings.getBoolean("double_word_enabled", true)
@@ -107,17 +162,20 @@ class VoskWakeWordService : Service(), RecognitionListener {
             isWaitingForSecondWord = true
             firstWordDetectedTime = currentTime
             Log.d("VoskService", "First detection. Waiting for second...")
+            updateNotification("Alert Triggered", "Wake word detected once. Waiting for second...")
         } else {
             if (currentTime - firstWordDetectedTime <= doubleWordWindow) {
                 isWaitingForSecondWord = false
                 triggerAlertSequence()
             } else {
+                // Window expired, set this as the new first word
                 firstWordDetectedTime = currentTime
             }
         }
     }
 
     private fun triggerAlertSequence() {
+        updateNotification("SOS ACTIVATED", "Initiating emergency sequence...")
         triggerEmergencyAlert()
     }
     
@@ -129,11 +187,15 @@ class VoskWakeWordService : Service(), RecognitionListener {
                 val smsEnabled = alertPrefs.getBoolean("sms_alert_enabled", false)
                 val autoCallEnabled = alertPrefs.getBoolean("auto_call_enabled", false)
                 
+                updateNotification("SOS: Processing", "Getting location...")
                 val location = LocationManager.getCurrentLocation(this@VoskWakeWordService)
 
                 // 1. Cloud Alert (Network)
                 if (networkEnabled) {
+                    updateNotification("SOS: Processing", "Capturing evidence photos...")
                     val photos = CameraManager.captureEmergencyPhotos(this@VoskWakeWordService)
+                    
+                    updateNotification("SOS: Sending", "Uploading data to Cloud...")
                     AlertManager.sendEmergencyAlert(
                         context = this@VoskWakeWordService,
                         latitude = location?.latitude,
@@ -145,14 +207,25 @@ class VoskWakeWordService : Service(), RecognitionListener {
                 }
 
                 // 2. Offline Alerts (SMS or Call)
-                // FIX: Check for EITHER SMS or Auto-Call enabled
                 if (smsEnabled || autoCallEnabled) {
-                    Log.d("VoskService", "Triggering Offline Alerts (SMS: $smsEnabled, Call: $autoCallEnabled)")
+                    val status = buildString {
+                        if (smsEnabled) append("SMS")
+                        if (smsEnabled && autoCallEnabled) append(" & ")
+                        if (autoCallEnabled) append("Call")
+                    }
+                    updateNotification("SOS: Sending", "Dispatching $status alerts...")
                     SmsHelper.sendEmergencySms(this@VoskWakeWordService, location?.latitude, location?.longitude)
                 }
 
+                updateNotification("SOS SENT", "All alerts dispatched successfully.")
+                kotlinx.coroutines.delay(10000)
+                updateNotification("Safety Guardian", "Continuous voice monitoring active")
+
             } catch (e: Exception) {
                 Log.e("VoskService", "Trigger error: ${e.message}")
+                updateNotification("SOS ERROR", "Restarting listener...")
+                kotlinx.coroutines.delay(5000)
+                updateNotification("Safety Guardian", "Continuous voice monitoring active")
             }
         }
     }
@@ -163,12 +236,20 @@ class VoskWakeWordService : Service(), RecognitionListener {
         } catch (e: Exception) { "" }
     }
 
-    override fun onFinalResult(hypothesis: String?) {}
-    override fun onError(exception: Exception?) {}
-    override fun onTimeout() { speechService?.startListening(this) }
+    override fun onError(exception: Exception?) {
+        Log.e("VoskService", "Vosk Error: ${exception?.message}")
+        retryListening()
+    }
+
+    override fun onTimeout() {
+        Log.d("VoskService", "Vosk Timeout - restarting...")
+        startListening()
+    }
 
     override fun onDestroy() {
         super.onDestroy()
+        isListening = false
+        mainHandler.removeCallbacksAndMessages(null)
         speechService?.stop()
         speechService?.shutdown()
     }
