@@ -18,7 +18,8 @@ import io.github.jan.supabase.gotrue.auth
 import io.github.jan.supabase.postgrest.from
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
+import java.time.OffsetDateTime
+import java.time.format.DateTimeFormatter
 import java.util.Date
 import java.util.Locale
 
@@ -229,7 +230,8 @@ class AlertHistoryActivity : AppCompatActivity() {
                 val allAlerts = alertsDeferred.await().map { HistoryItem.Alert(it) }
                 val allContacts = contactsDeferred.await().map { HistoryItem.Contact(it) }
                 
-                val combined = (allAlerts + allContacts).sortedByDescending { it.timestamp }
+                // Sort using the robust timestamp parsing
+                val combined = (allAlerts + allContacts).sortedByDescending { it.getSortTimestamp() }
                 val paged = combined.drop(currentOffset).take(pageSize)
 
                 historyItems.addAll(paged)
@@ -277,6 +279,14 @@ sealed class HistoryItem {
     abstract val timestamp: String?
     data class Alert(val alert: AlertHistory) : HistoryItem() { override val timestamp = alert.created_at }
     data class Contact(val request: ContactRequest) : HistoryItem() { override val timestamp = request.created_at }
+    
+    // Helper to get a proper sortable long timestamp
+    fun getSortTimestamp(): Long {
+        if (timestamp == null) return 0
+        return try {
+            OffsetDateTime.parse(timestamp).toInstant().toEpochMilli()
+        } catch (e: Exception) { 0 }
+    }
 }
 
 class AlertAdapter(
@@ -333,16 +343,19 @@ class AlertAdapter(
     private fun formatTime(timestamp: String?, textView: android.widget.TextView) {
         if (timestamp == null) { textView.text = "Recently"; return }
         try {
-            val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault())
-            val date = sdf.parse(timestamp)
-            val diff = Date().time - (date?.time ?: 0)
+            // Correctly parse the ISO 8601 UTC timestamp from Supabase
+            val alertTime = OffsetDateTime.parse(timestamp).toInstant().toEpochMilli()
+            val diff = System.currentTimeMillis() - alertTime
+            
             textView.text = when {
                 diff < 60000 -> "Just now"
                 diff < 3600000 -> "${diff / 60000}m ago"
                 diff < 86400000 -> "${diff / 3600000}h ago"
                 else -> "${diff / 86400000}d ago"
             }
-        } catch (e: Exception) { textView.text = "Recently" }
+        } catch (e: Exception) { 
+            textView.text = "Recently" 
+        }
     }
 
     override fun getItemCount() = items.size
